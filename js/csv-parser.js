@@ -62,8 +62,21 @@ class CSVParser {
         // Detect column mappings
         const columnMap = this.detectColumnMappings(columns);
 
-        // Detect data type (polygon vs point)
-        const dataType = this.detectDataType(columnMap);
+        // Detect data type (polygon vs point vs address)
+        const dataType = this.detectDataType(columnMap, columns);
+
+        // If address type, return raw data for geocoding
+        if (dataType === 'address') {
+            return {
+                features: null,
+                type: dataType,
+                columnMap: columnMap,
+                originalColumns: columns,
+                rowCount: data.length,
+                rawData: data,
+                needsGeocoding: true
+            };
+        }
 
         // Process features
         const features = this.extractFeatures(data, columnMap, dataType);
@@ -73,7 +86,8 @@ class CSVParser {
             type: dataType,
             columnMap: columnMap,
             originalColumns: columns,
-            rowCount: data.length
+            rowCount: data.length,
+            needsGeocoding: false
         };
     }
 
@@ -105,17 +119,33 @@ class CSVParser {
     }
 
     /**
-     * Detect data type (polygon or point) based on available columns
+     * Detect data type (polygon, point, or address) based on available columns
      * @param {Object} columnMap - Column mappings
-     * @returns {string} Data type ('polygon' or 'point')
+     * @param {Array} columns - Original column names
+     * @returns {string} Data type ('polygon', 'point', or 'address')
      */
-    detectDataType(columnMap) {
+    detectDataType(columnMap, columns) {
         if (columnMap.wkt) {
             return 'polygon';
         } else if (columnMap.latitude && columnMap.longitude) {
             return 'point';
         } else {
-            throw new Error('No valid geometry columns found. CSV must contain either WKT or Latitude/Longitude columns.');
+            // Check for address columns
+            const normalizedColumns = columns.map(col =>
+                col.toLowerCase().trim().replace(/[^a-z0-9]/g, '')
+            );
+
+            // Address column patterns
+            const addressPatterns = ['street', 'address', 'addr', 'city', 'zip', 'zipcode', 'postal'];
+            const hasAddressColumns = normalizedColumns.some(col =>
+                addressPatterns.some(pattern => col.includes(pattern))
+            );
+
+            if (hasAddressColumns) {
+                return 'address';
+            }
+
+            throw new Error('No valid geometry columns found. CSV must contain either WKT, Latitude/Longitude, or address columns.');
         }
     }
 

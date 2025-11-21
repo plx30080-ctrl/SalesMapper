@@ -10,7 +10,10 @@ const AZURE_MAPS_KEY = '8zaoREb1sCrPeAeKbs8051yFk7WFAB1O8i4CzIpVvLJicQqszva4JQQJ
 let mapManager;
 let layerManager;
 let csvParser;
+let geocodingService;
 let currentEditingFeature = null;
+let currentCSVData = null; // Store CSV data for geocoding
+let realtimeListenerEnabled = false;
 
 /**
  * Initialize the application
@@ -25,6 +28,7 @@ async function initializeApp() {
 
         layerManager = new LayerManager(mapManager);
         csvParser = new CSVParser();
+        geocodingService = new GeocodingService(AZURE_MAPS_KEY);
 
         // Setup event listeners
         setupEventListeners();
@@ -35,14 +39,20 @@ async function initializeApp() {
         // Setup layer update handler
         layerManager.setOnLayerUpdate(updateLayerList);
 
+        // Setup drawing complete handler
+        mapManager.setOnDrawComplete(handleDrawingComplete);
+
+        // Setup real-time Firebase listener
+        enableRealtimeSync();
+
         console.log('Application initialized successfully');
         hideLoading();
 
-        showNotification('Application ready! Upload a CSV to get started.', 'success');
+        showToast('Application ready! Upload a CSV to get started.', 'success');
     } catch (error) {
         console.error('Error initializing application:', error);
         hideLoading();
-        showNotification('Error initializing application: ' + error.message, 'error');
+        showToast('Error initializing application: ' + error.message, 'error');
     }
 }
 
@@ -57,6 +67,19 @@ function setupEventListeners() {
             document.getElementById('uploadBtn').disabled = false;
         }
     });
+
+    // Address Search
+    document.getElementById('searchBtn').addEventListener('click', handleAddressSearch);
+    document.getElementById('addressSearch').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            handleAddressSearch();
+        }
+    });
+
+    // Drawing Tools
+    document.getElementById('drawPointBtn').addEventListener('click', () => startDrawingMode('point'));
+    document.getElementById('drawPolygonBtn').addEventListener('click', () => startDrawingMode('polygon'));
+    document.getElementById('deleteDrawingBtn').addEventListener('click', handleDeleteDrawing);
 
     // Layer Management
     document.getElementById('createLayerBtn').addEventListener('click', handleCreateLayer);
@@ -82,15 +105,141 @@ function setupEventListeners() {
     document.getElementById('cancelEdit').addEventListener('click', closeEditModal);
     document.getElementById('deleteFeature').addEventListener('click', handleDeleteFeature);
     document.getElementById('editForm').addEventListener('submit', handleEditFormSubmit);
-    document.querySelector('.close').addEventListener('click', closeEditModal);
 
-    // Close modal when clicking outside
+    // Column Mapping Modal
+    document.getElementById('columnMapForm').addEventListener('submit', handleColumnMapSubmit);
+    document.getElementById('cancelMapping').addEventListener('click', closeColumnMapModal);
+
+    // Modal close buttons
+    document.querySelectorAll('.close').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const modalId = e.target.dataset.modal;
+            if (modalId) {
+                document.getElementById(modalId).classList.remove('show');
+            }
+        });
+    });
+
+    // Close modals when clicking outside
     window.addEventListener('click', (e) => {
-        const modal = document.getElementById('editModal');
-        if (e.target === modal) {
-            closeEditModal();
+        if (e.target.classList.contains('modal')) {
+            e.target.classList.remove('show');
         }
     });
+}
+
+/**
+ * Handle address search
+ */
+async function handleAddressSearch() {
+    const searchInput = document.getElementById('addressSearch');
+    const query = searchInput.value.trim();
+
+    if (!query) {
+        showToast('Please enter an address to search', 'warning');
+        return;
+    }
+
+    showLoading('Searching for address...');
+
+    try {
+        const result = await mapManager.searchAddress(query);
+
+        hideLoading();
+
+        if (result.success) {
+            showToast(`Found: ${result.address}`, 'success');
+            searchInput.value = '';
+        } else {
+            showToast(`No results found for "${query}"`, 'error');
+        }
+    } catch (error) {
+        hideLoading();
+        showToast('Error searching address: ' + error.message, 'error');
+    }
+}
+
+/**
+ * Start drawing mode
+ * @param {string} type - Type of drawing ('point' or 'polygon')
+ */
+function startDrawingMode(type) {
+    const mode = type === 'point' ? 'draw-point' : 'draw-polygon';
+    mapManager.startDrawing(mode);
+
+    const statusText = type === 'point' ? 'Click on the map to add a point' : 'Click to draw polygon vertices';
+    document.getElementById('drawingStatus').textContent = statusText;
+
+    showToast(`Drawing mode: ${type}. Click on map to draw.`, 'info');
+}
+
+/**
+ * Handle drawing complete
+ * @param {Object} shape - Drawn shape
+ */
+function handleDrawingComplete(shape) {
+    mapManager.stopDrawing();
+    document.getElementById('drawingStatus').textContent = 'Select a tool to start drawing';
+
+    // Prompt for feature name
+    const name = prompt('Enter a name for this feature:', 'New Feature');
+
+    if (!name) {
+        // User cancelled, remove the shape
+        mapManager.clearDrawings();
+        return;
+    }
+
+    // Get shape properties
+    const geometry = shape.toJson();
+    const properties = {
+        name: name,
+        id: `drawn_${Date.now()}`,
+        source: 'manual'
+    };
+
+    // Determine layer to add to
+    const layers = layerManager.getAllLayers();
+    let targetLayerId;
+
+    if (layers.length === 0) {
+        // Create new layer
+        targetLayerId = layerManager.createLayer('Drawn Features');
+    } else {
+        // Use first layer or prompt
+        targetLayerId = layers[0].id;
+    }
+
+    // Create feature
+    const feature = {
+        ...properties,
+        ...geometry
+    };
+
+    // Add to layer
+    const layer = layerManager.getLayer(targetLayerId);
+    if (layer) {
+        layer.features.push(feature);
+        layerManager.notifyUpdate();
+    }
+
+    // Clear drawing
+    mapManager.clearDrawings();
+
+    showToast('Feature added successfully', 'success');
+}
+
+/**
+ * Handle delete drawing
+ */
+function handleDeleteDrawing() {
+    const deleted = mapManager.deleteSelectedDrawing();
+
+    if (deleted) {
+        showToast('Drawing deleted', 'success');
+    } else {
+        showToast('No drawing selected. Click on a drawn feature first.', 'warning');
+    }
 }
 
 /**
@@ -101,7 +250,7 @@ async function handleCSVUpload() {
     const file = fileInput.files[0];
 
     if (!file) {
-        showNotification('Please select a CSV file', 'warning');
+        showToast('Please select a CSV file', 'warning');
         return;
     }
 
@@ -112,6 +261,21 @@ async function handleCSVUpload() {
         const parsed = await csvParser.parseFile(file);
 
         console.log('CSV parsed:', parsed);
+
+        // Check if geocoding is needed
+        if (parsed.needsGeocoding) {
+            hideLoading();
+
+            // Store CSV data
+            currentCSVData = parsed;
+
+            // Auto-detect address columns
+            const detectedMapping = geocodingService.detectAddressColumns(parsed.originalColumns);
+
+            // Show column mapping modal
+            showColumnMapModal(parsed.originalColumns, detectedMapping);
+            return;
+        }
 
         // Prompt for layer name
         const layerName = prompt('Enter layer name:', file.name.replace('.csv', ''));
@@ -129,7 +293,7 @@ async function handleCSVUpload() {
         });
 
         hideLoading();
-        showNotification(`Layer "${layerName}" created with ${parsed.features.length} features`, 'success');
+        showToast(`Layer "${layerName}" created with ${parsed.features.length} features`, 'success');
 
         // Clear file input
         fileInput.value = '';
@@ -140,8 +304,176 @@ async function handleCSVUpload() {
     } catch (error) {
         console.error('Error uploading CSV:', error);
         hideLoading();
-        showNotification('Error parsing CSV: ' + error.message, 'error');
+        showToast('Error parsing CSV: ' + error.message, 'error');
     }
+}
+
+/**
+ * Show column mapping modal
+ * @param {Array} columns - Available columns
+ * @param {Object} detectedMapping - Auto-detected column mapping
+ */
+function showColumnMapModal(columns, detectedMapping) {
+    const modal = document.getElementById('columnMapModal');
+
+    // Populate dropdowns
+    const selects = ['street1Column', 'street2Column', 'cityColumn', 'stateColumn', 'zipColumn'];
+
+    selects.forEach(selectId => {
+        const select = document.getElementById(selectId);
+        select.innerHTML = selectId === 'street1Column' || selectId === 'cityColumn' || selectId === 'zipColumn'
+            ? '<option value="">-- Select Column --</option>'
+            : '<option value="">-- None --</option>';
+
+        columns.forEach(col => {
+            const option = document.createElement('option');
+            option.value = col;
+            option.textContent = col;
+            select.appendChild(option);
+        });
+
+        // Set detected value if available
+        const mappingKey = selectId.replace('Column', '');
+        if (detectedMapping[mappingKey]) {
+            select.value = detectedMapping[mappingKey];
+        }
+    });
+
+    modal.classList.add('show');
+}
+
+/**
+ * Close column map modal
+ */
+function closeColumnMapModal() {
+    document.getElementById('columnMapModal').classList.remove('show');
+    currentCSVData = null;
+}
+
+/**
+ * Handle column mapping form submission
+ */
+async function handleColumnMapSubmit(e) {
+    e.preventDefault();
+
+    if (!currentCSVData) {
+        showToast('No CSV data available', 'error');
+        return;
+    }
+
+    // Get column mapping
+    const columnMapping = {
+        street1: document.getElementById('street1Column').value,
+        street2: document.getElementById('street2Column').value,
+        city: document.getElementById('cityColumn').value,
+        state: document.getElementById('stateColumn').value,
+        zip: document.getElementById('zipColumn').value
+    };
+
+    // Validate required fields
+    if (!columnMapping.street1 || !columnMapping.city || !columnMapping.zip) {
+        showToast('Please select at least Street, City, and Zip columns', 'warning');
+        return;
+    }
+
+    // Close modal
+    closeColumnMapModal();
+
+    // Show geocoding progress modal
+    showGeocodingModal();
+
+    // Start geocoding
+    try {
+        const geocodedFeatures = await geocodingService.geocodeBatch(
+            currentCSVData.rawData,
+            columnMapping,
+            updateGeocodingProgress
+        );
+
+        // Get statistics
+        const stats = geocodingService.getStatistics(geocodedFeatures);
+
+        // Close geocoding modal
+        closeGeocodingModal();
+
+        // Prompt for layer name
+        const layerName = prompt(
+            `Geocoding complete! ${stats.successful} of ${stats.total} addresses geocoded.\nEnter layer name:`,
+            'Geocoded Locations'
+        );
+
+        if (!layerName) {
+            currentCSVData = null;
+            return;
+        }
+
+        // Filter out failed geocodes
+        const validFeatures = geocodedFeatures.filter(f => f.latitude && f.longitude);
+
+        // Create layer
+        const layerId = layerManager.createLayer(layerName, validFeatures, 'point', {
+            sourceFile: currentCSVData.originalColumns,
+            geocoded: true,
+            geocodingStats: stats,
+            columnMapping: columnMapping,
+            importDate: new Date().toISOString()
+        });
+
+        showToast(`Layer "${layerName}" created with ${validFeatures.length} geocoded locations`, 'success');
+
+        // Update filter/sort dropdowns
+        updateColumnSelects();
+
+        // Clear stored data
+        currentCSVData = null;
+
+        // Clear file input
+        const fileInput = document.getElementById('csvFileInput');
+        fileInput.value = '';
+        document.getElementById('uploadBtn').disabled = true;
+
+    } catch (error) {
+        console.error('Error geocoding:', error);
+        closeGeocodingModal();
+        showToast('Error geocoding addresses: ' + error.message, 'error');
+    }
+}
+
+/**
+ * Show geocoding progress modal
+ */
+function showGeocodingModal() {
+    const modal = document.getElementById('geocodingModal');
+    modal.classList.add('show');
+
+    // Reset progress
+    document.getElementById('geocodingProgress').style.width = '0%';
+    document.getElementById('geocodingProgress').textContent = '';
+    document.getElementById('geocodingStatus').textContent = 'Starting geocoding...';
+    document.getElementById('geocodingStats').textContent = '';
+}
+
+/**
+ * Close geocoding modal
+ */
+function closeGeocodingModal() {
+    document.getElementById('geocodingModal').classList.remove('show');
+}
+
+/**
+ * Update geocoding progress
+ * @param {Object} progress - Progress information
+ */
+function updateGeocodingProgress(progress) {
+    const progressBar = document.getElementById('geocodingProgress');
+    const statusText = document.getElementById('geocodingStatus');
+    const statsText = document.getElementById('geocodingStats');
+
+    progressBar.style.width = progress.percentage + '%';
+    progressBar.textContent = Math.round(progress.percentage) + '%';
+
+    statusText.textContent = `Geocoding: ${progress.current} of ${progress.total}`;
+    statsText.textContent = `Success: ${progress.successCount} | Failed: ${progress.errorCount}`;
 }
 
 /**
@@ -152,14 +484,14 @@ function handleCreateLayer() {
     const name = nameInput.value.trim();
 
     if (!name) {
-        showNotification('Please enter a layer name', 'warning');
+        showToast('Please enter a layer name', 'warning');
         return;
     }
 
     // Create empty layer
     layerManager.createLayer(name);
 
-    showNotification(`Layer "${name}" created`, 'success');
+    showToast(`Layer "${name}" created`, 'success');
 
     // Clear input
     nameInput.value = '';
@@ -227,7 +559,7 @@ function createLayerItem(layer) {
         e.stopPropagation();
         const features = layerManager.getLayer(layer.id).features;
         csvParser.exportToCSV(features, `${layer.name}.csv`);
-        showNotification(`Layer "${layer.name}" exported`, 'success');
+        showToast(`Layer "${layer.name}" exported`, 'success');
     });
 
     // Delete layer
@@ -235,7 +567,7 @@ function createLayerItem(layer) {
         e.stopPropagation();
         if (confirm(`Delete layer "${layer.name}"?`)) {
             layerManager.deleteLayer(layer.id);
-            showNotification(`Layer "${layer.name}" deleted`, 'success');
+            showToast(`Layer "${layer.name}" deleted`, 'success');
         }
     });
 
@@ -313,7 +645,7 @@ function updateFeatureInfo(properties) {
  */
 function openEditModal() {
     if (!currentEditingFeature) {
-        showNotification('No feature selected', 'warning');
+        showToast('No feature selected', 'warning');
         return;
     }
 
@@ -382,7 +714,7 @@ function handleEditFormSubmit(e) {
     updateFeatureInfo({ ...currentEditingFeature.properties, ...updatedProperties });
 
     closeEditModal();
-    showNotification('Feature updated', 'success');
+    showToast('Feature updated', 'success');
 }
 
 /**
@@ -405,7 +737,7 @@ function handleDeleteFeature() {
 
         currentEditingFeature = null;
 
-        showNotification('Feature deleted', 'success');
+        showToast('Feature deleted', 'success');
     }
 }
 
@@ -417,7 +749,7 @@ function handleApplyFilter() {
     const value = document.getElementById('filterValue').value;
 
     if (!column || !value) {
-        showNotification('Please select a column and enter a filter value', 'warning');
+        showToast('Please select a column and enter a filter value', 'warning');
         return;
     }
 
@@ -429,7 +761,7 @@ function handleApplyFilter() {
         }
     });
 
-    showNotification(`Filter applied: ${column} contains "${value}"`, 'success');
+    showToast(`Filter applied: ${column} contains "${value}"`, 'success');
 }
 
 /**
@@ -442,7 +774,7 @@ function handleClearFilter() {
     });
 
     document.getElementById('filterValue').value = '';
-    showNotification('Filters cleared', 'success');
+    showToast('Filters cleared', 'success');
 }
 
 /**
@@ -452,7 +784,7 @@ function handleSort(direction) {
     const column = document.getElementById('sortColumn').value;
 
     if (!column) {
-        showNotification('Please select a column to sort by', 'warning');
+        showToast('Please select a column to sort by', 'warning');
         return;
     }
 
@@ -462,7 +794,7 @@ function handleSort(direction) {
         layerManager.sortLayer(layer.id, column, direction);
     });
 
-    showNotification(`Sorted by ${column} (${direction})`, 'success');
+    showToast(`Sorted by ${column} (${direction})`, 'success');
 }
 
 /**
@@ -514,11 +846,11 @@ async function handleSaveToFirebase() {
         await firebaseManager.saveAllLayers(layersData);
 
         hideLoading();
-        showNotification('Data saved to Firebase successfully', 'success');
+        showToast('Data saved to Firebase successfully', 'success');
     } catch (error) {
         console.error('Error saving to Firebase:', error);
         hideLoading();
-        showNotification('Error saving to Firebase: ' + error.message, 'error');
+        showToast('Error saving to Firebase: ' + error.message, 'error');
     }
 }
 
@@ -540,16 +872,36 @@ async function handleLoadFromFirebase() {
         if (result.layers && Object.keys(result.layers).length > 0) {
             layerManager.importLayers(result.layers);
             hideLoading();
-            showNotification('Data loaded from Firebase successfully', 'success');
+            showToast('Data loaded from Firebase successfully', 'success');
         } else {
             hideLoading();
-            showNotification('No data found in Firebase', 'info');
+            showToast('No data found in Firebase', 'info');
         }
     } catch (error) {
         console.error('Error loading from Firebase:', error);
         hideLoading();
-        showNotification('Error loading from Firebase: ' + error.message, 'error');
+        showToast('Error loading from Firebase: ' + error.message, 'error');
     }
+}
+
+/**
+ * Enable real-time Firebase sync
+ */
+function enableRealtimeSync() {
+    if (realtimeListenerEnabled) return;
+
+    firebaseManager.listenForUpdates((updatedLayers) => {
+        console.log('Real-time update received from Firebase');
+
+        // Only import if there are changes and user isn't currently editing
+        if (Object.keys(updatedLayers).length > 0 && !document.getElementById('editModal').classList.contains('show')) {
+            layerManager.importLayers(updatedLayers);
+            showToast('Data synced from Firebase', 'info');
+        }
+    });
+
+    realtimeListenerEnabled = true;
+    console.log('Real-time Firebase sync enabled');
 }
 
 /**
@@ -570,14 +922,50 @@ function hideLoading() {
 }
 
 /**
- * Show notification
+ * Show toast notification
+ * @param {string} message - Notification message
+ * @param {string} type - Notification type (success, error, warning, info)
  */
-function showNotification(message, type = 'info') {
-    // Simple console notification for now
-    console.log(`[${type.toUpperCase()}] ${message}`);
+function showToast(message, type = 'info') {
+    // Create toast container if it doesn't exist
+    let container = document.querySelector('.toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
 
-    // You could enhance this with a toast notification library
-    alert(message);
+    // Create toast element
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+
+    const icons = {
+        success: '✓',
+        error: '✗',
+        warning: '⚠',
+        info: 'ℹ'
+    };
+
+    toast.innerHTML = `
+        <span class="toast-icon">${icons[type]}</span>
+        <span class="toast-message">${message}</span>
+        <span class="toast-close">×</span>
+    `;
+
+    // Add close functionality
+    toast.querySelector('.toast-close').addEventListener('click', () => {
+        toast.remove();
+    });
+
+    // Add to container
+    container.appendChild(toast);
+
+    // Auto remove after 3 seconds
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
+
+    console.log(`[${type.toUpperCase()}] ${message}`);
 }
 
 // Initialize app when DOM is ready
