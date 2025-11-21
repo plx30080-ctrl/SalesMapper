@@ -861,13 +861,16 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
         return;
     }
 
-    // Define color schemes
+    // Define color schemes (support both number and string keys)
     const tierColors = {
-        '1': '#107c10',    // Green
+        1: '#107c10',      // Green (number)
+        '1': '#107c10',    // Green (string)
         'tier 1': '#107c10',
-        '2': '#ffb900',    // Yellow
+        2: '#ffb900',      // Yellow (number)
+        '2': '#ffb900',    // Yellow (string)
         'tier 2': '#ffb900',
-        '3': '#d13438',    // Red
+        3: '#d13438',      // Red (number)
+        '3': '#d13438',    // Red (string)
         'tier 3': '#d13438'
     };
 
@@ -879,8 +882,14 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
     // Create color mapping
     const colorMap = {};
     uniqueValues.forEach((value, index) => {
-        if (styleType === 'tier' && tierColors[String(value).toLowerCase()]) {
-            colorMap[value] = tierColors[String(value).toLowerCase()];
+        if (styleType === 'tier') {
+            // Check direct match first (for numbers), then try string conversion
+            const color = tierColors[value] || tierColors[String(value).toLowerCase()];
+            if (color) {
+                colorMap[value] = color;
+            } else {
+                colorMap[value] = defaultColors[index % defaultColors.length];
+            }
         } else {
             colorMap[value] = defaultColors[index % defaultColors.length];
         }
@@ -929,7 +938,7 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
     const matchExpression = ['match', ['coalesce', ['get', actualPropertyName], 'N/A']];
 
     uniqueValues.forEach(value => {
-        matchExpression.push(String(value));  // The value to match
+        matchExpression.push(value);  // Keep original type (number or string)
         matchExpression.push(colorMap[value]); // The color for that value
     });
 
