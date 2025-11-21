@@ -959,7 +959,8 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
                 allowOverlap: true
             },
             textOptions: {
-                textField: ['get', 'name'],
+                // Use coalesce to handle null names
+                textField: ['coalesce', ['get', 'name'], ''],
                 offset: [0, 1.5],
                 color: '#333333',
                 haloColor: '#ffffff',
