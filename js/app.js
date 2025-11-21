@@ -821,6 +821,11 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
     // Get unique values for the property
     const uniqueValues = [...new Set(layer.features.map(f => f[property]))].filter(v => v != null);
 
+    if (uniqueValues.length === 0) {
+        showToast(`No values found for property "${property}"`, 'warning');
+        return;
+    }
+
     // Define color schemes
     const tierColors = {
         '1': '#107c10',    // Green
@@ -848,20 +853,99 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
 
     // Remove existing layer
     mapManager.removeLayer(layerId);
-    mapManager.createDataSource(layerId);
+    const dataSource = mapManager.createDataSource(layerId);
 
-    // Group features by property value and add with corresponding colors
+    // Add all features to data source
+    const geoJsonFeatures = layer.features.map((feature, index) => {
+        let geometry;
+
+        if (layer.type === 'polygon' && feature.wkt) {
+            geometry = mapManager.parseWKT(feature.wkt);
+        } else if (layer.type === 'point' && feature.latitude && feature.longitude) {
+            geometry = {
+                type: 'Point',
+                coordinates: [parseFloat(feature.longitude), parseFloat(feature.latitude)]
+            };
+        } else {
+            return null;
+        }
+
+        return {
+            type: 'Feature',
+            id: feature.id || `${layerId}-${index}`,
+            geometry: geometry,
+            properties: { ...feature, layerId: layerId }
+        };
+    }).filter(f => f !== null);
+
+    dataSource.add(geoJsonFeatures);
+
+    // Build Azure Maps match expression for data-driven styling
+    // Format: ['match', ['get', 'propertyName'], value1, color1, value2, color2, ..., defaultColor]
+    const matchExpression = ['match', ['get', property]];
+
     uniqueValues.forEach(value => {
-        const featuresForValue = layer.features.filter(f => f[property] === value);
-        const color = colorMap[value];
+        matchExpression.push(String(value));  // The value to match
+        matchExpression.push(colorMap[value]); // The color for that value
+    });
 
-        // Temporarily override color selection
-        const originalGetNextColor = mapManager.getNextColor;
-        mapManager.getNextColor = () => color;
+    matchExpression.push('#cccccc'); // Default color for unmatched values
 
-        mapManager.addFeaturesToLayer(layerId, featuresForValue, layer.type);
+    // Create layers with data-driven styling
+    if (layer.type === 'polygon') {
+        const polygonLayer = new atlas.layer.PolygonLayer(dataSource, `${layerId}-polygons`, {
+            fillColor: matchExpression,
+            fillOpacity: 0.5
+        });
 
-        mapManager.getNextColor = originalGetNextColor;
+        const lineLayer = new atlas.layer.LineLayer(dataSource, `${layerId}-lines`, {
+            strokeColor: matchExpression,
+            strokeWidth: 2
+        });
+
+        mapManager.map.layers.add([polygonLayer, lineLayer]);
+        mapManager.layers.set(layerId, {
+            polygon: polygonLayer,
+            line: lineLayer,
+            color: 'data-driven'
+        });
+    } else {
+        const symbolLayer = new atlas.layer.SymbolLayer(dataSource, `${layerId}-symbols`, {
+            iconOptions: {
+                image: 'marker-blue',
+                anchor: 'center',
+                allowOverlap: true
+            },
+            textOptions: {
+                textField: ['get', 'name'],
+                offset: [0, 1.5],
+                color: '#333333',
+                haloColor: '#ffffff',
+                haloWidth: 2
+            }
+        });
+
+        mapManager.map.layers.add(symbolLayer);
+        mapManager.layers.set(layerId, {
+            symbol: symbolLayer,
+            color: 'data-driven'
+        });
+    }
+
+    // Fit map to data source
+    mapManager.fitMapToDataSource(dataSource);
+
+    // Setup click events for this layer
+    const layerIds = layer.type === 'polygon'
+        ? [`${layerId}-polygons`, `${layerId}-lines`]
+        : [`${layerId}-symbols`];
+
+    layerIds.forEach(id => {
+        mapManager.map.events.add('click', id, (e) => {
+            if (mapManager.onFeatureClick) {
+                mapManager.onFeatureClick(e, layerId);
+            }
+        });
     });
 
     // Store style info
@@ -870,6 +954,8 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
     layer.colorMap = colorMap;
 
     layerManager.notifyUpdate();
+
+    showToast(`Styled by ${property}`, 'success');
 }
 
 /**
