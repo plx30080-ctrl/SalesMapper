@@ -939,6 +939,18 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
             line: lineLayer,
             color: 'data-driven'
         });
+
+        // Setup click events using the layer objects, not IDs
+        mapManager.map.events.add('click', polygonLayer, (e) => {
+            if (mapManager.onFeatureClick) {
+                mapManager.onFeatureClick(e, layerId);
+            }
+        });
+        mapManager.map.events.add('click', lineLayer, (e) => {
+            if (mapManager.onFeatureClick) {
+                mapManager.onFeatureClick(e, layerId);
+            }
+        });
     } else {
         const symbolLayer = new atlas.layer.SymbolLayer(dataSource, `${layerId}-symbols`, {
             iconOptions: {
@@ -960,23 +972,17 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
             symbol: symbolLayer,
             color: 'data-driven'
         });
-    }
 
-    // Fit map to data source
-    mapManager.fitMapToDataSource(dataSource);
-
-    // Setup click events for this layer
-    const layerIds = layer.type === 'polygon'
-        ? [`${layerId}-polygons`, `${layerId}-lines`]
-        : [`${layerId}-symbols`];
-
-    layerIds.forEach(id => {
-        mapManager.map.events.add('click', id, (e) => {
+        // Setup click event using the layer object, not ID
+        mapManager.map.events.add('click', symbolLayer, (e) => {
             if (mapManager.onFeatureClick) {
                 mapManager.onFeatureClick(e, layerId);
             }
         });
-    });
+    }
+
+    // Fit map to data source
+    mapManager.fitMapToDataSource(dataSource);
 
         // Store style info
         layer.styleType = styleType;
