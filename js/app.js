@@ -846,6 +846,16 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
     // Get unique values for the property
     const uniqueValues = [...new Set(layer.features.map(f => f[actualPropertyName]))].filter(v => v != null);
 
+    console.log('=== TIER STYLING DEBUG ===');
+    console.log('Property to style by:', property);
+    console.log('Actual property name (case-matched):', actualPropertyName);
+    console.log('Unique values found:', uniqueValues);
+    console.log('Sample features (first 3):', layer.features.slice(0, 3).map(f => ({
+        id: f.id,
+        [actualPropertyName]: f[actualPropertyName],
+        allProps: Object.keys(f)
+    })));
+
     if (uniqueValues.length === 0) {
         showToast(`No values found for property "${property}"`, 'warning');
         return;
@@ -876,6 +886,8 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
         }
     });
 
+    console.log('Color map created:', colorMap);
+
     // Remove existing layer
     mapManager.removeLayer(layerId);
     const dataSource = mapManager.createDataSource(layerId);
@@ -903,6 +915,12 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
         };
     }).filter(f => f !== null);
 
+    console.log('GeoJSON features created (first 3):', geoJsonFeatures.slice(0, 3).map(f => ({
+        id: f.id,
+        geometry: f.geometry.type,
+        properties: f.properties
+    })));
+
     dataSource.add(geoJsonFeatures);
 
     // Build Azure Maps match expression for data-driven styling
@@ -920,6 +938,9 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
     matchExpression.push('#cccccc'); // Color for null/undefined values
 
     matchExpression.push('#cccccc'); // Default color for any other unmatched values
+
+    console.log('Match expression built:', JSON.stringify(matchExpression, null, 2));
+    console.log('=== END TIER STYLING DEBUG ===');
 
     // Create layers with data-driven styling
     if (layer.type === 'polygon') {
