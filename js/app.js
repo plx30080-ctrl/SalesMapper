@@ -418,11 +418,13 @@ async function handleCSVUpload() {
     try {
         const parsed = await csvParser.parseFile(file);
         console.log('CSV parsed:', parsed);
+        console.log('Columns found:', parsed.originalColumns);
 
         if (parsed.needsGeocoding) {
             hideLoading();
             currentCSVData = parsed;
             const detectedMapping = geocodingService.detectAddressColumns(parsed.originalColumns);
+            console.log('Detected address mapping:', detectedMapping);
             showColumnMapModal(parsed.originalColumns, detectedMapping);
             return;
         }
@@ -454,7 +456,17 @@ async function handleCSVUpload() {
     } catch (error) {
         console.error('Error uploading CSV:', error);
         hideLoading();
-        showToast('Error parsing CSV: ' + error.message, 'error');
+
+        // Show detailed error message
+        const errorMsg = error.message || 'Unknown error occurred';
+        showToast('Error parsing CSV: ' + errorMsg, 'error', 8000);
+
+        // Also show an alert with the full error for complex messages
+        if (errorMsg.includes('\n')) {
+            setTimeout(() => {
+                alert('CSV Parsing Error:\n\n' + errorMsg);
+            }, 500);
+        }
     }
 }
 
@@ -1444,7 +1456,7 @@ function hideLoading() {
 /**
  * Show toast notification
  */
-function showToast(message, type = 'info') {
+function showToast(message, type = 'info', duration = 3000) {
     let container = document.querySelector('.toast-container');
     if (!container) {
         container = document.createElement('div');
@@ -1476,7 +1488,7 @@ function showToast(message, type = 'info') {
 
     setTimeout(() => {
         toast.remove();
-    }, 3000);
+    }, duration);
 
     console.log(`[${type.toUpperCase()}] ${message}`);
 }
