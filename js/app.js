@@ -240,7 +240,7 @@ function updateLayerGroupList() {
         // For "All Layers", show total count of all layers
         const layerCount = group.id === allLayersGroupId
             ? layerManager.getAllLayers().length
-            : group.layerIds.length;
+            : (group.layerIds || []).length;
 
         groupItem.innerHTML = `
             <input type="checkbox" class="layer-group-toggle" ${group.visible ? 'checked' : ''}>
@@ -287,7 +287,7 @@ function toggleGroupVisibility(groupId, visible) {
     const group = layerGroups.get(groupId);
     if (!group) return;
 
-    group.layerIds.forEach(layerId => {
+    (group.layerIds || []).forEach(layerId => {
         const layer = layerManager.getLayer(layerId);
         if (layer) {
             if (visible) {
@@ -475,9 +475,15 @@ async function handleCSVUpload() {
  */
 function addLayerToGroup(layerId, groupId) {
     const group = layerGroups.get(groupId);
-    if (group && !group.layerIds.includes(layerId)) {
-        group.layerIds.push(layerId);
-        updateLayerGroupList();
+    if (group) {
+        // Ensure layerIds array exists
+        if (!group.layerIds) {
+            group.layerIds = [];
+        }
+        if (!group.layerIds.includes(layerId)) {
+            group.layerIds.push(layerId);
+            updateLayerGroupList();
+        }
     }
 }
 
@@ -610,7 +616,7 @@ function updateLayerList(layers) {
     if (activeGroup) {
         const group = layerGroups.get(activeGroup);
         if (group) {
-            displayLayers = layers.filter(l => group.layerIds.includes(l.id));
+            displayLayers = layers.filter(l => (group.layerIds || []).includes(l.id));
         }
     }
 
@@ -861,13 +867,16 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
         return;
     }
 
-    // Define color schemes
+    // Define color schemes (support both number and string keys)
     const tierColors = {
-        '1': '#107c10',    // Green
+        1: '#107c10',      // Green (number)
+        '1': '#107c10',    // Green (string)
         'tier 1': '#107c10',
-        '2': '#ffb900',    // Yellow
+        2: '#ffb900',      // Yellow (number)
+        '2': '#ffb900',    // Yellow (string)
         'tier 2': '#ffb900',
-        '3': '#d13438',    // Red
+        3: '#d13438',      // Red (number)
+        '3': '#d13438',    // Red (string)
         'tier 3': '#d13438'
     };
 
@@ -879,8 +888,14 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
     // Create color mapping
     const colorMap = {};
     uniqueValues.forEach((value, index) => {
-        if (styleType === 'tier' && tierColors[String(value).toLowerCase()]) {
-            colorMap[value] = tierColors[String(value).toLowerCase()];
+        if (styleType === 'tier') {
+            // Check direct match first (for numbers), then try string conversion
+            const color = tierColors[value] || tierColors[String(value).toLowerCase()];
+            if (color) {
+                colorMap[value] = color;
+            } else {
+                colorMap[value] = defaultColors[index % defaultColors.length];
+            }
         } else {
             colorMap[value] = defaultColors[index % defaultColors.length];
         }
@@ -929,7 +944,7 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
     const matchExpression = ['match', ['coalesce', ['get', actualPropertyName], 'N/A']];
 
     uniqueValues.forEach(value => {
-        matchExpression.push(String(value));  // The value to match
+        matchExpression.push(value);  // Keep original type (number or string)
         matchExpression.push(colorMap[value]); // The color for that value
     });
 
@@ -1054,6 +1069,9 @@ function showMoveToGroupDialog(layerId) {
  */
 function removeLayerFromAllGroups(layerId) {
     layerGroups.forEach(group => {
+        if (!group.layerIds) {
+            group.layerIds = [];
+        }
         const index = group.layerIds.indexOf(layerId);
         if (index > -1) {
             group.layerIds.splice(index, 1);
