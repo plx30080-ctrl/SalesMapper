@@ -84,11 +84,58 @@ body {
     padding: 1rem;
 }
 
+.panel.compact {
+    padding: 0.5rem;
+}
+
 .panel h2 {
     font-size: 1.1rem;
     font-weight: 600;
     margin-bottom: 1rem;
     color: var(--text-primary);
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.panel-header h2 {
+    margin-bottom: 0;
+}
+
+.icon-btn {
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1.2rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.icon-btn:hover {
+    background: var(--primary-hover);
+}
+
+/* ===== Quick Actions ===== */
+.quick-actions {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.5rem;
+}
+
+.quick-actions .btn {
+    padding: 0.5rem;
+    font-size: 0.85rem;
 }
 
 /* ===== Upload Section ===== */
@@ -108,6 +155,67 @@ body {
 .upload-info {
     margin-top: 0.5rem;
     color: var(--text-secondary);
+}
+
+.search-area-modal {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.search-area-modal input {
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+/* ===== Layer Groups ===== */
+.layer-group-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.layer-group-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.layer-group-item:hover {
+    background-color: #e1dfdd;
+}
+
+.layer-group-item.active {
+    background-color: var(--secondary-color);
+    border-color: var(--primary-color);
+}
+
+.layer-group-name {
+    font-weight: 500;
+    flex: 1;
+}
+
+.layer-group-count {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    background-color: var(--bg-primary);
+    padding: 0.15rem 0.4rem;
+    border-radius: 10px;
+    margin-right: 0.5rem;
+}
+
+.layer-group-toggle {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
 }
 
 /* ===== Layer Management ===== */
@@ -137,12 +245,12 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.75rem;
+    padding: 0.5rem;
     background-color: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 4px;
-    cursor: pointer;
     transition: all 0.2s;
+    position: relative;
 }
 
 .layer-item:hover {
@@ -160,50 +268,92 @@ body {
     align-items: center;
     gap: 0.5rem;
     flex: 1;
+    min-width: 0;
 }
 
 .layer-checkbox {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     cursor: pointer;
+    flex-shrink: 0;
 }
 
 .layer-name {
     font-weight: 500;
     flex: 1;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .layer-count {
-    font-size: 0.85rem;
+    font-size: 0.75rem;
     color: var(--text-secondary);
     background-color: var(--bg-primary);
-    padding: 0.25rem 0.5rem;
-    border-radius: 12px;
+    padding: 0.15rem 0.4rem;
+    border-radius: 10px;
+    flex-shrink: 0;
 }
 
-.layer-actions {
-    display: flex;
-    gap: 0.25rem;
-}
-
-.layer-btn {
+.layer-menu-btn {
     background: none;
     border: none;
     cursor: pointer;
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
     color: var(--text-secondary);
-    font-size: 1rem;
+    font-size: 1.2rem;
+    line-height: 1;
     transition: all 0.2s;
+    flex-shrink: 0;
 }
 
-.layer-btn:hover {
+.layer-menu-btn:hover {
     background-color: var(--bg-primary);
     color: var(--primary-color);
 }
 
-.layer-btn.delete:hover {
-    color: var(--danger-color);
+/* Context Menu */
+.context-menu {
+    display: none;
+    position: absolute;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    box-shadow: var(--shadow-lg);
+    z-index: 2000;
+    min-width: 200px;
+}
+
+.context-menu.show {
+    display: block;
+}
+
+.context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.2s;
+}
+
+.context-menu-item:hover {
+    background-color: var(--bg-secondary);
+}
+
+.context-menu-item:first-child {
+    border-radius: 4px 4px 0 0;
+}
+
+.context-menu-item:last-child {
+    border-radius: 0 0 4px 4px;
 }
 
 /* ===== Filter & Sort ===== */

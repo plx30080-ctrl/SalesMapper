@@ -26,69 +26,35 @@
         <div class="main-content">
             <!-- Sidebar -->
             <aside class="sidebar">
-                <!-- CSV Upload Section -->
-                <section class="panel">
-                    <h2>Upload Data</h2>
-                    <div class="upload-area">
-                        <input type="file" id="csvFileInput" accept=".csv" />
-                        <button id="uploadBtn" class="btn btn-primary">Upload CSV</button>
-                    </div>
-                    <div class="upload-info">
-                        <small>Supported columns: WKT, Latitude, Longitude, Name, Description, and custom attributes</small>
+                <!-- Quick Actions -->
+                <section class="panel compact">
+                    <div class="quick-actions">
+                        <button id="showUploadBtn" class="btn btn-small">📤 Upload</button>
+                        <button id="showSearchBtn" class="btn btn-small">🔍 Search</button>
+                        <button id="showDrawToolsBtn" class="btn btn-small">✏️ Draw</button>
+                        <button id="showFilterBtn" class="btn btn-small">⚙️ Filter</button>
                     </div>
                 </section>
 
-                <!-- Address Search Section -->
+                <!-- Layer Groups -->
                 <section class="panel">
-                    <h2>Address Search</h2>
-                    <div class="search-area">
-                        <input type="text" id="addressSearch" placeholder="Search for an address..." />
-                        <button id="searchBtn" class="btn btn-primary">Search</button>
+                    <div class="panel-header">
+                        <h2>Layer Groups</h2>
+                        <button id="addGroupBtn" class="icon-btn" title="Add group">+</button>
+                    </div>
+                    <div id="layerGroupList" class="layer-group-list">
+                        <!-- Layer groups will be dynamically added here -->
                     </div>
                 </section>
 
-                <!-- Drawing Tools Section -->
+                <!-- Layers Section -->
                 <section class="panel">
-                    <h2>Drawing Tools</h2>
-                    <div class="drawing-controls">
-                        <button id="drawPointBtn" class="btn btn-small">📍 Draw Point</button>
-                        <button id="drawPolygonBtn" class="btn btn-small">⬟ Draw Polygon</button>
-                        <button id="deleteDrawingBtn" class="btn btn-small btn-danger">🗑️ Delete Selected</button>
-                    </div>
-                    <div class="drawing-info">
-                        <small id="drawingStatus">Select a tool to start drawing</small>
-                    </div>
-                </section>
-
-                <!-- Layer Management Section -->
-                <section class="panel">
-                    <h2>Layers</h2>
-                    <div class="layer-controls">
-                        <input type="text" id="newLayerName" placeholder="New layer name..." />
-                        <button id="createLayerBtn" class="btn btn-small">Create Layer</button>
+                    <div class="panel-header">
+                        <h2>Layers</h2>
+                        <button id="addLayerBtn" class="icon-btn" title="Add layer">+</button>
                     </div>
                     <div id="layerList" class="layer-list">
                         <!-- Layers will be dynamically added here -->
-                    </div>
-                </section>
-
-                <!-- Filter & Sort Section -->
-                <section class="panel">
-                    <h2>Filter & Sort</h2>
-                    <div class="filter-controls">
-                        <select id="filterColumn" class="form-select">
-                            <option value="">Select column...</option>
-                        </select>
-                        <input type="text" id="filterValue" placeholder="Filter value..." />
-                        <button id="applyFilterBtn" class="btn btn-small">Apply Filter</button>
-                        <button id="clearFilterBtn" class="btn btn-small btn-secondary">Clear</button>
-                    </div>
-                    <div class="sort-controls">
-                        <select id="sortColumn" class="form-select">
-                            <option value="">Sort by...</option>
-                        </select>
-                        <button id="sortAscBtn" class="btn btn-small">↑ Asc</button>
-                        <button id="sortDescBtn" class="btn btn-small">↓ Desc</button>
                     </div>
                 </section>
 
@@ -204,6 +170,138 @@
                         </div>
                         <p id="geocodingStatus">Processing addresses...</p>
                         <p id="geocodingStats"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Upload Modal -->
+        <div id="uploadModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Upload CSV Data</h2>
+                    <span class="close" data-modal="uploadModal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="upload-area">
+                        <input type="file" id="csvFileInput" accept=".csv" />
+                        <button id="uploadBtn" class="btn btn-primary">Upload CSV</button>
+                    </div>
+                    <div class="upload-info">
+                        <small>Supported: WKT polygons, Lat/Long coordinates, or address columns (Street, City, Zip)</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search Modal -->
+        <div id="searchModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Address Search</h2>
+                    <span class="close" data-modal="searchModal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="search-area-modal">
+                        <input type="text" id="addressSearch" placeholder="Enter address to search..." />
+                        <button id="searchBtn" class="btn btn-primary">Search</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Drawing Tools Modal -->
+        <div id="drawToolsModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Drawing Tools</h2>
+                    <span class="close" data-modal="drawToolsModal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="drawing-controls">
+                        <button id="drawPointBtn" class="btn btn-primary">📍 Draw Point</button>
+                        <button id="drawPolygonBtn" class="btn btn-primary">⬟ Draw Polygon</button>
+                        <button id="deleteDrawingBtn" class="btn btn-danger">🗑️ Delete Selected</button>
+                    </div>
+                    <div class="drawing-info">
+                        <small id="drawingStatus">Select a tool to start drawing</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter & Sort Modal -->
+        <div id="filterModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Filter & Sort</h2>
+                    <span class="close" data-modal="filterModal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <h3>Filter</h3>
+                    <div class="filter-controls">
+                        <select id="filterColumn" class="form-select">
+                            <option value="">Select column...</option>
+                        </select>
+                        <input type="text" id="filterValue" placeholder="Filter value..." />
+                        <button id="applyFilterBtn" class="btn btn-primary">Apply Filter</button>
+                        <button id="clearFilterBtn" class="btn btn-secondary">Clear Filter</button>
+                    </div>
+                    <hr style="margin: 1.5rem 0;">
+                    <h3>Sort</h3>
+                    <div class="sort-controls">
+                        <select id="sortColumn" class="form-select">
+                            <option value="">Sort by...</option>
+                        </select>
+                        <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                            <button id="sortAscBtn" class="btn btn-primary">↑ Ascending</button>
+                            <button id="sortDescBtn" class="btn btn-primary">↓ Descending</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Layer Actions Menu -->
+        <div id="layerActionsMenu" class="context-menu">
+            <button class="context-menu-item" data-action="zoom">🔍 Zoom to Layer</button>
+            <button class="context-menu-item" data-action="style">🎨 Style Options</button>
+            <button class="context-menu-item" data-action="export">📥 Export to CSV</button>
+            <button class="context-menu-item" data-action="group">📁 Move to Group</button>
+            <button class="context-menu-item" data-action="delete">🗑️ Delete Layer</button>
+        </div>
+
+        <!-- Style Options Modal -->
+        <div id="styleModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Style Options</h2>
+                    <span class="close" data-modal="styleModal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Style Type:</label>
+                        <select id="styleType" class="form-select">
+                            <option value="single">Single Color</option>
+                            <option value="tier">Tier Map (by Tier column)</option>
+                            <option value="zone">Zone Map (unique colors per zone)</option>
+                            <option value="bdm">BDM Map (by BDM column)</option>
+                            <option value="custom">Custom Property</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="customPropertyGroup" style="display: none;">
+                        <label>Property Column:</label>
+                        <select id="customProperty" class="form-select">
+                            <option value="">Select property...</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="singleColorGroup">
+                        <label>Color:</label>
+                        <input type="color" id="singleColor" value="#0078d4" />
+                    </div>
+                    <div class="modal-actions">
+                        <button id="applyStyleBtn" class="btn btn-primary">Apply Style</button>
+                        <button id="cancelStyleBtn" class="btn btn-secondary">Cancel</button>
                     </div>
                 </div>
             </div>
