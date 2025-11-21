@@ -99,8 +99,11 @@ class CSVParser {
     detectColumnMappings(columns) {
         const mappings = {};
 
+        // Filter out empty column names
+        const validColumns = columns.filter(col => col && col.trim() !== '');
+
         // Normalize column names for comparison
-        const normalizedColumns = columns.map(col =>
+        const normalizedColumns = validColumns.map(col =>
             col.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')
         );
 
@@ -111,7 +114,7 @@ class CSVParser {
             );
 
             if (match !== -1) {
-                mappings[type] = columns[match];
+                mappings[type] = validColumns[match];
             }
         }
 
@@ -125,13 +128,19 @@ class CSVParser {
      * @returns {string} Data type ('polygon', 'point', or 'address')
      */
     detectDataType(columnMap, columns) {
+        // Filter out empty column names
+        const validColumns = columns.filter(col => col && col.trim() !== '');
+
+        console.log('Detecting data type from columns:', validColumns);
+        console.log('Column mappings found:', columnMap);
+
         if (columnMap.wkt) {
             return 'polygon';
         } else if (columnMap.latitude && columnMap.longitude) {
             return 'point';
         } else {
             // Check for address columns
-            const normalizedColumns = columns.map(col =>
+            const normalizedColumns = validColumns.map(col =>
                 col.toLowerCase().trim().replace(/[^a-z0-9]/g, '')
             );
 
@@ -141,11 +150,22 @@ class CSVParser {
                 addressPatterns.some(pattern => col.includes(pattern))
             );
 
+            console.log('Has address columns:', hasAddressColumns);
+
             if (hasAddressColumns) {
                 return 'address';
             }
 
-            throw new Error('No valid geometry columns found. CSV must contain either WKT, Latitude/Longitude, or address columns.');
+            // Provide detailed error message
+            const columnList = validColumns.length > 0
+                ? validColumns.slice(0, 10).join(', ') + (validColumns.length > 10 ? '...' : '')
+                : 'No valid columns found';
+
+            throw new Error(`No valid geometry columns found. CSV must contain either:\n` +
+                          `- WKT column (for polygons/zones)\n` +
+                          `- Latitude & Longitude columns (for points)\n` +
+                          `- Address columns (Street, City, Zip, etc.)\n\n` +
+                          `Your CSV columns: ${columnList}`);
         }
     }
 

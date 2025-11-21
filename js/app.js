@@ -418,11 +418,13 @@ async function handleCSVUpload() {
     try {
         const parsed = await csvParser.parseFile(file);
         console.log('CSV parsed:', parsed);
+        console.log('Columns found:', parsed.originalColumns);
 
         if (parsed.needsGeocoding) {
             hideLoading();
             currentCSVData = parsed;
             const detectedMapping = geocodingService.detectAddressColumns(parsed.originalColumns);
+            console.log('Detected address mapping:', detectedMapping);
             showColumnMapModal(parsed.originalColumns, detectedMapping);
             return;
         }
@@ -454,7 +456,17 @@ async function handleCSVUpload() {
     } catch (error) {
         console.error('Error uploading CSV:', error);
         hideLoading();
-        showToast('Error parsing CSV: ' + error.message, 'error');
+
+        // Show detailed error message
+        const errorMsg = error.message || 'Unknown error occurred';
+        showToast('Error parsing CSV: ' + errorMsg, 'error', 8000);
+
+        // Also show an alert with the full error for complex messages
+        if (errorMsg.includes('\n')) {
+            setTimeout(() => {
+                alert('CSV Parsing Error:\n\n' + errorMsg);
+            }, 500);
+        }
     }
 }
 
@@ -818,8 +830,25 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
     const layer = layerManager.getLayer(layerId);
     if (!layer) return;
 
+    // Find the actual property name (case-insensitive)
+    let actualPropertyName = property;
+    if (layer.features.length > 0) {
+        const firstFeature = layer.features[0];
+        const foundKey = Object.keys(firstFeature).find(
+            key => key.toLowerCase() === property.toLowerCase()
+        );
+        if (foundKey) {
+            actualPropertyName = foundKey;
+        }
+    }
+
     // Get unique values for the property
-    const uniqueValues = [...new Set(layer.features.map(f => f[property]))].filter(v => v != null);
+    const uniqueValues = [...new Set(layer.features.map(f => f[actualPropertyName]))].filter(v => v != null);
+
+    if (uniqueValues.length === 0) {
+        showToast(`No values found for property "${property}"`, 'warning');
+        return;
+    }
 
     // Define color schemes
     const tierColors = {
@@ -848,28 +877,109 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
 
     // Remove existing layer
     mapManager.removeLayer(layerId);
-    mapManager.createDataSource(layerId);
+    const dataSource = mapManager.createDataSource(layerId);
 
-    // Group features by property value and add with corresponding colors
+    // Add all features to data source
+    const geoJsonFeatures = layer.features.map((feature, index) => {
+        let geometry;
+
+        if (layer.type === 'polygon' && feature.wkt) {
+            geometry = mapManager.parseWKT(feature.wkt);
+        } else if (layer.type === 'point' && feature.latitude && feature.longitude) {
+            geometry = {
+                type: 'Point',
+                coordinates: [parseFloat(feature.longitude), parseFloat(feature.latitude)]
+            };
+        } else {
+            return null;
+        }
+
+        return {
+            type: 'Feature',
+            id: feature.id || `${layerId}-${index}`,
+            geometry: geometry,
+            properties: { ...feature, layerId: layerId }
+        };
+    }).filter(f => f !== null);
+
+    dataSource.add(geoJsonFeatures);
+
+    // Build Azure Maps match expression for data-driven styling
+    // Format: ['match', ['get', 'propertyName'], value1, color1, value2, color2, ..., defaultColor]
+    const matchExpression = ['match', ['get', actualPropertyName]];
+
     uniqueValues.forEach(value => {
-        const featuresForValue = layer.features.filter(f => f[property] === value);
-        const color = colorMap[value];
+        matchExpression.push(String(value));  // The value to match
+        matchExpression.push(colorMap[value]); // The color for that value
+    });
 
-        // Temporarily override color selection
-        const originalGetNextColor = mapManager.getNextColor;
-        mapManager.getNextColor = () => color;
+    matchExpression.push('#cccccc'); // Default color for unmatched values
 
-        mapManager.addFeaturesToLayer(layerId, featuresForValue, layer.type);
+    // Create layers with data-driven styling
+    if (layer.type === 'polygon') {
+        const polygonLayer = new atlas.layer.PolygonLayer(dataSource, `${layerId}-polygons`, {
+            fillColor: matchExpression,
+            fillOpacity: 0.5
+        });
 
-        mapManager.getNextColor = originalGetNextColor;
+        const lineLayer = new atlas.layer.LineLayer(dataSource, `${layerId}-lines`, {
+            strokeColor: matchExpression,
+            strokeWidth: 2
+        });
+
+        mapManager.map.layers.add([polygonLayer, lineLayer]);
+        mapManager.layers.set(layerId, {
+            polygon: polygonLayer,
+            line: lineLayer,
+            color: 'data-driven'
+        });
+    } else {
+        const symbolLayer = new atlas.layer.SymbolLayer(dataSource, `${layerId}-symbols`, {
+            iconOptions: {
+                image: 'marker-blue',
+                anchor: 'center',
+                allowOverlap: true
+            },
+            textOptions: {
+                textField: ['get', 'name'],
+                offset: [0, 1.5],
+                color: '#333333',
+                haloColor: '#ffffff',
+                haloWidth: 2
+            }
+        });
+
+        mapManager.map.layers.add(symbolLayer);
+        mapManager.layers.set(layerId, {
+            symbol: symbolLayer,
+            color: 'data-driven'
+        });
+    }
+
+    // Fit map to data source
+    mapManager.fitMapToDataSource(dataSource);
+
+    // Setup click events for this layer
+    const layerIds = layer.type === 'polygon'
+        ? [`${layerId}-polygons`, `${layerId}-lines`]
+        : [`${layerId}-symbols`];
+
+    layerIds.forEach(id => {
+        mapManager.map.events.add('click', id, (e) => {
+            if (mapManager.onFeatureClick) {
+                mapManager.onFeatureClick(e, layerId);
+            }
+        });
     });
 
     // Store style info
     layer.styleType = styleType;
-    layer.styleProperty = property;
+    layer.styleProperty = actualPropertyName;
     layer.colorMap = colorMap;
 
     layerManager.notifyUpdate();
+
+    showToast(`Styled by ${property}`, 'success');
 }
 
 /**
@@ -1270,6 +1380,14 @@ async function handleLoadFromFirebase() {
             }
 
             layerManager.importLayers(result.layers);
+
+            // Re-apply property-based styling for layers that have it
+            layerManager.getAllLayers().forEach(layer => {
+                if (layer.styleType && layer.styleProperty) {
+                    applyPropertyBasedStyle(layer.id, layer.styleProperty, layer.styleType);
+                }
+            });
+
             hideLoading();
             showToast('Data loaded from Firebase successfully', 'success');
         } else {
@@ -1302,6 +1420,14 @@ function enableRealtimeSync() {
             }
 
             layerManager.importLayers(updatedLayers);
+
+            // Re-apply property-based styling for layers that have it
+            layerManager.getAllLayers().forEach(layer => {
+                if (layer.styleType && layer.styleProperty) {
+                    applyPropertyBasedStyle(layer.id, layer.styleProperty, layer.styleType);
+                }
+            });
+
             showToast('Data synced from Firebase', 'info');
         }
     });
@@ -1330,7 +1456,7 @@ function hideLoading() {
 /**
  * Show toast notification
  */
-function showToast(message, type = 'info') {
+function showToast(message, type = 'info', duration = 3000) {
     let container = document.querySelector('.toast-container');
     if (!container) {
         container = document.createElement('div');
@@ -1362,7 +1488,7 @@ function showToast(message, type = 'info') {
 
     setTimeout(() => {
         toast.remove();
-    }, 3000);
+    }, duration);
 
     console.log(`[${type.toUpperCase()}] ${message}`);
 }

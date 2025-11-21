@@ -201,12 +201,16 @@ class GeocodingService {
     detectAddressColumns(columns) {
         const mapping = {};
 
-        // Normalize columns for matching
-        const normalizedColumns = columns.map((col, idx) => ({
-            original: col,
-            normalized: col.toLowerCase().trim().replace(/[^a-z0-9]/g, ''),
-            index: idx
-        }));
+        // Filter out empty column names and normalize
+        const normalizedColumns = columns
+            .filter(col => col && col.trim() !== '')
+            .map((col, idx) => ({
+                original: col,
+                normalized: col.toLowerCase().trim().replace(/[^a-z0-9]/g, ''),
+                index: idx
+            }));
+
+        console.log('Detecting address columns from:', normalizedColumns.map(c => c.original));
 
         // Street 1 patterns
         const street1Patterns = ['street1', 'street', 'address', 'address1', 'addr1', 'addr'];
