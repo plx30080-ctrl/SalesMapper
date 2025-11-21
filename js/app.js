@@ -37,7 +37,7 @@ async function initializeApp() {
         // Setup event listeners
         setupEventListeners();
 
-        // Setup map click handler for closing popup
+        // Setup map click handler for clearing selection
         setupMapClickHandler();
 
         // Setup map feature click handler
@@ -67,13 +67,13 @@ async function initializeApp() {
 }
 
 /**
- * Setup map click handler to close popups
+ * Setup map click handler to clear selection
  */
 function setupMapClickHandler() {
     mapManager.map.events.add('click', (e) => {
         // Check if click was on map background (not on a feature)
         if (!e.shapes || e.shapes.length === 0) {
-            // Clear selection and close popup
+            // Clear selection
             mapManager.clearSelectedFeature();
             currentEditingFeature = null;
 

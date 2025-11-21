@@ -10,7 +10,6 @@ class MapManager {
         this.map = null;
         this.dataSources = new Map(); // Store data sources by layer ID
         this.layers = new Map(); // Store map layers by layer ID
-        this.popups = new Map(); // Store popups
         this.selectedFeature = null;
         this.onFeatureClick = null;
         this.drawingManager = null;
@@ -280,16 +279,6 @@ class MapManager {
         });
 
         this.map.layers.add(symbolLayer);
-
-        // Show popup
-        const popup = new atlas.Popup({
-            position: [lon, lat],
-            content: `<div style="padding: 10px;"><strong>${address}</strong></div>`,
-            pixelOffset: [0, -18]
-        });
-
-        popup.open(this.map);
-        this.searchPopup = popup;
     }
 
     /**
@@ -482,52 +471,10 @@ class MapManager {
                 properties: shape.getProperties()
             };
 
-            // Show popup
-            this.showPopup(e.position, shape.getProperties());
-
             // Call callback if provided
             if (this.onFeatureClick) {
                 this.onFeatureClick(this.selectedFeature);
             }
-        }
-    }
-
-    /**
-     * Show popup at location
-     * @param {Array} position - [longitude, latitude]
-     * @param {Object} properties - Feature properties
-     */
-    showPopup(position, properties) {
-        // Create popup content
-        let content = '<div style="padding: 10px;">';
-        for (let key in properties) {
-            if (key !== 'layerId' && properties[key]) {
-                content += `<strong>${key}:</strong> ${properties[key]}<br>`;
-            }
-        }
-        content += '</div>';
-
-        // Create or update popup
-        if (!this.popup) {
-            this.popup = new atlas.Popup({
-                pixelOffset: [0, -18]
-            });
-        }
-
-        this.popup.setOptions({
-            content: content,
-            position: position
-        });
-
-        this.popup.open(this.map);
-    }
-
-    /**
-     * Close popup
-     */
-    closePopup() {
-        if (this.popup) {
-            this.popup.close();
         }
     }
 
