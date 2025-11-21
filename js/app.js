@@ -16,6 +16,7 @@ let currentCSVData = null;
 let realtimeListenerEnabled = false;
 let layerGroups = new Map(); // groupId -> {name, layerIds: []}
 let activeGroup = null;
+let allLayersGroupId = null; // Special group that shows all layers
 let currentLayerForActions = null;
 
 /**
@@ -51,8 +52,8 @@ async function initializeApp() {
         // Setup real-time Firebase listener
         enableRealtimeSync();
 
-        // Initialize with default group
-        createLayerGroup('All Layers');
+        // Initialize with default "All Layers" group
+        allLayersGroupId = createLayerGroup('All Layers');
 
         console.log('Application initialized successfully');
         hideLoading();
@@ -231,10 +232,15 @@ function updateLayerGroupList() {
 
     layerGroups.forEach(group => {
         const groupItem = document.createElement('div');
-        groupItem.className = 'layer-group-item' + (activeGroup === group.id ? ' active' : '');
+        // Highlight "All Layers" when activeGroup is null, or highlight the active group
+        const isActive = (activeGroup === group.id) || (activeGroup === null && group.id === allLayersGroupId);
+        groupItem.className = 'layer-group-item' + (isActive ? ' active' : '');
         groupItem.dataset.groupId = group.id;
 
-        const layerCount = group.layerIds.length;
+        // For "All Layers", show total count of all layers
+        const layerCount = group.id === allLayersGroupId
+            ? layerManager.getAllLayers().length
+            : group.layerIds.length;
 
         groupItem.innerHTML = `
             <input type="checkbox" class="layer-group-toggle" ${group.visible ? 'checked' : ''}>
@@ -264,7 +270,12 @@ function updateLayerGroupList() {
  * Select a layer group
  */
 function selectGroup(groupId) {
-    activeGroup = groupId;
+    // Special handling for "All Layers" - show all layers
+    if (groupId === allLayersGroupId) {
+        activeGroup = null;
+    } else {
+        activeGroup = groupId;
+    }
     updateLayerGroupList();
     updateLayerList(layerManager.getAllLayers());
 }
