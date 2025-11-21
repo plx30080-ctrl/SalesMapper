@@ -324,7 +324,7 @@ class LayerManager {
         const layer = this.layers.get(layerId);
         if (!layer) return null;
 
-        return {
+        const exported = {
             id: layer.id,
             name: layer.name,
             type: layer.type,
@@ -332,11 +332,21 @@ class LayerManager {
             visible: layer.visible,
             color: layer.color,
             metadata: layer.metadata,
-            createdAt: layer.createdAt,
-            styleType: layer.styleType,
-            styleProperty: layer.styleProperty,
-            colorMap: layer.colorMap
+            createdAt: layer.createdAt
         };
+
+        // Only add style properties if they exist (Firebase can't save undefined)
+        if (layer.styleType !== undefined) {
+            exported.styleType = layer.styleType;
+        }
+        if (layer.styleProperty !== undefined) {
+            exported.styleProperty = layer.styleProperty;
+        }
+        if (layer.colorMap !== undefined) {
+            exported.colorMap = layer.colorMap;
+        }
+
+        return exported;
     }
 
     /**
