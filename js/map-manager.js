@@ -13,6 +13,9 @@ class MapManager {
         this.popups = new Map(); // Store popups
         this.selectedFeature = null;
         this.onFeatureClick = null;
+        this.drawingManager = null;
+        this.drawingDataSource = null;
+        this.onDrawComplete = null;
         this.colorPalette = [
             '#0078d4', '#d13438', '#107c10', '#ffb900', '#8764b8',
             '#00b7c3', '#f7630c', '#ca5010', '#038387', '#486860'
@@ -80,6 +83,213 @@ class MapManager {
         }), {
             position: 'top-left'
         });
+
+        // Initialize drawing tools
+        this.setupDrawingTools();
+    }
+
+    /**
+     * Setup drawing tools
+     */
+    setupDrawingTools() {
+        // Create data source for drawing
+        this.drawingDataSource = new atlas.source.DataSource();
+        this.map.sources.add(this.drawingDataSource);
+
+        // Create drawing manager
+        this.drawingManager = new atlas.drawing.DrawingManager(this.map, {
+            source: this.drawingDataSource,
+            toolbar: null, // We'll use custom toolbar
+            mode: 'idle'
+        });
+
+        // Add event listener for drawing complete
+        this.map.events.add('drawingcomplete', this.drawingManager, (shape) => {
+            if (this.onDrawComplete) {
+                this.onDrawComplete(shape);
+            }
+        });
+
+        // Add layers to render drawn shapes
+        this.map.layers.add([
+            new atlas.layer.PolygonLayer(this.drawingDataSource, 'drawing-polygons', {
+                fillColor: 'rgba(0, 120, 212, 0.3)',
+                strokeColor: '#0078d4',
+                strokeWidth: 2
+            }),
+            new atlas.layer.LineLayer(this.drawingDataSource, 'drawing-lines', {
+                strokeColor: '#0078d4',
+                strokeWidth: 2
+            }),
+            new atlas.layer.SymbolLayer(this.drawingDataSource, 'drawing-points', {
+                iconOptions: {
+                    image: 'marker-blue',
+                    allowOverlap: true
+                }
+            })
+        ]);
+    }
+
+    /**
+     * Enable drawing mode
+     * @param {string} mode - Drawing mode ('draw-point', 'draw-polygon', etc.)
+     */
+    startDrawing(mode) {
+        if (!this.drawingManager) {
+            console.error('Drawing manager not initialized');
+            return;
+        }
+
+        this.drawingManager.setOptions({ mode: mode });
+    }
+
+    /**
+     * Stop drawing mode
+     */
+    stopDrawing() {
+        if (this.drawingManager) {
+            this.drawingManager.setOptions({ mode: 'idle' });
+        }
+    }
+
+    /**
+     * Delete selected drawing
+     */
+    deleteSelectedDrawing() {
+        if (this.drawingManager) {
+            const selectedShapes = this.drawingManager.getSelected();
+            if (selectedShapes && selectedShapes.length > 0) {
+                this.drawingDataSource.remove(selectedShapes);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Get all drawn shapes
+     * @returns {Array} Array of shapes
+     */
+    getDrawnShapes() {
+        if (this.drawingDataSource) {
+            return this.drawingDataSource.getShapes();
+        }
+        return [];
+    }
+
+    /**
+     * Clear all drawings
+     */
+    clearDrawings() {
+        if (this.drawingDataSource) {
+            this.drawingDataSource.clear();
+        }
+    }
+
+    /**
+     * Set callback for draw complete
+     * @param {Function} callback - Callback function
+     */
+    setOnDrawComplete(callback) {
+        this.onDrawComplete = callback;
+    }
+
+    /**
+     * Search for address and navigate to it
+     * @param {string} query - Search query
+     * @returns {Promise<Object>} Search result
+     */
+    async searchAddress(query) {
+        const params = new URLSearchParams({
+            'api-version': '1.0',
+            'subscription-key': this.subscriptionKey,
+            'query': query,
+            'limit': '1'
+        });
+
+        try {
+            const response = await fetch(`https://atlas.microsoft.com/search/address/json?${params}`);
+            const data = await response.json();
+
+            if (data.results && data.results.length > 0) {
+                const result = data.results[0];
+                const position = result.position;
+
+                // Navigate to location
+                this.map.setCamera({
+                    center: [position.lon, position.lat],
+                    zoom: 15,
+                    type: 'ease',
+                    duration: 1000
+                });
+
+                // Add marker
+                this.addSearchMarker(position.lon, position.lat, result.address.freeformAddress);
+
+                return {
+                    success: true,
+                    latitude: position.lat,
+                    longitude: position.lon,
+                    address: result.address.freeformAddress
+                };
+            }
+
+            return {
+                success: false,
+                error: 'No results found'
+            };
+        } catch (error) {
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    /**
+     * Add search result marker
+     * @param {number} lon - Longitude
+     * @param {number} lat - Latitude
+     * @param {string} address - Address text
+     */
+    addSearchMarker(lon, lat, address) {
+        // Remove existing search marker if any
+        if (this.searchMarkerDataSource) {
+            this.map.sources.remove(this.searchMarkerDataSource);
+        }
+
+        // Create new data source
+        this.searchMarkerDataSource = new atlas.source.DataSource();
+        this.map.sources.add(this.searchMarkerDataSource);
+
+        // Add marker
+        const marker = new atlas.data.Feature(new atlas.data.Point([lon, lat]), {
+            title: 'Search Result',
+            description: address
+        });
+
+        this.searchMarkerDataSource.add(marker);
+
+        // Add symbol layer
+        const symbolLayer = new atlas.layer.SymbolLayer(this.searchMarkerDataSource, null, {
+            iconOptions: {
+                image: 'marker-red',
+                anchor: 'center',
+                allowOverlap: true
+            }
+        });
+
+        this.map.layers.add(symbolLayer);
+
+        // Show popup
+        const popup = new atlas.Popup({
+            position: [lon, lat],
+            content: `<div style="padding: 10px;"><strong>${address}</strong></div>`,
+            pixelOffset: [0, -18]
+        });
+
+        popup.open(this.map);
+        this.searchPopup = popup;
     }
 
     /**

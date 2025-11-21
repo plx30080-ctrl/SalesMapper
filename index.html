@@ -38,6 +38,28 @@
                     </div>
                 </section>
 
+                <!-- Address Search Section -->
+                <section class="panel">
+                    <h2>Address Search</h2>
+                    <div class="search-area">
+                        <input type="text" id="addressSearch" placeholder="Search for an address..." />
+                        <button id="searchBtn" class="btn btn-primary">Search</button>
+                    </div>
+                </section>
+
+                <!-- Drawing Tools Section -->
+                <section class="panel">
+                    <h2>Drawing Tools</h2>
+                    <div class="drawing-controls">
+                        <button id="drawPointBtn" class="btn btn-small">📍 Draw Point</button>
+                        <button id="drawPolygonBtn" class="btn btn-small">⬟ Draw Polygon</button>
+                        <button id="deleteDrawingBtn" class="btn btn-small btn-danger">🗑️ Delete Selected</button>
+                    </div>
+                    <div class="drawing-info">
+                        <small id="drawingStatus">Select a tool to start drawing</small>
+                    </div>
+                </section>
+
                 <!-- Layer Management Section -->
                 <section class="panel">
                     <h2>Layers</h2>
@@ -103,7 +125,7 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h2>Edit Feature</h2>
-                    <span class="close">&times;</span>
+                    <span class="close" data-modal="editModal">&times;</span>
                 </div>
                 <div class="modal-body">
                     <form id="editForm">
@@ -116,6 +138,73 @@
                             <button type="button" class="btn btn-danger" id="deleteFeature">Delete Feature</button>
                         </div>
                     </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Column Mapping Modal -->
+        <div id="columnMapModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Map Address Columns</h2>
+                    <span class="close" data-modal="columnMapModal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <p>Your CSV doesn't have WKT or Lat/Long columns. Please map address columns for geocoding:</p>
+                    <form id="columnMapForm">
+                        <div class="form-group">
+                            <label for="street1Column">Street 1 / Address:</label>
+                            <select id="street1Column" class="form-select" required>
+                                <option value="">-- Select Column --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="street2Column">Street 2 (Optional):</label>
+                            <select id="street2Column" class="form-select">
+                                <option value="">-- None --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="cityColumn">City:</label>
+                            <select id="cityColumn" class="form-select" required>
+                                <option value="">-- Select Column --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="stateColumn">State (Optional):</label>
+                            <select id="stateColumn" class="form-select">
+                                <option value="">-- None --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="zipColumn">Zip Code:</label>
+                            <select id="zipColumn" class="form-select" required>
+                                <option value="">-- Select Column --</option>
+                            </select>
+                        </div>
+                        <div class="modal-actions">
+                            <button type="submit" class="btn btn-primary">Geocode Addresses</button>
+                            <button type="button" class="btn btn-secondary" id="cancelMapping">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Geocoding Progress Modal -->
+        <div id="geocodingModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Geocoding Addresses</h2>
+                </div>
+                <div class="modal-body">
+                    <div class="progress-container">
+                        <div class="progress-bar">
+                            <div id="geocodingProgress" class="progress-fill"></div>
+                        </div>
+                        <p id="geocodingStatus">Processing addresses...</p>
+                        <p id="geocodingStats"></p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -134,6 +223,10 @@
     <!-- Azure Maps SDK -->
     <script src="https://atlas.microsoft.com/sdk/javascript/mapcontrol/2/atlas.min.js"></script>
 
+    <!-- Azure Maps Drawing Tools -->
+    <link rel="stylesheet" href="https://atlas.microsoft.com/sdk/javascript/drawing/0/atlas-drawing.min.css" />
+    <script src="https://atlas.microsoft.com/sdk/javascript/drawing/0/atlas-drawing.min.js"></script>
+
     <!-- PapaParse for CSV parsing -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 
@@ -142,6 +235,7 @@
 
     <!-- Application JavaScript -->
     <script src="js/firebase-config.js"></script>
+    <script src="js/geocoding-service.js"></script>
     <script src="js/map-manager.js"></script>
     <script src="js/layer-manager.js"></script>
     <script src="js/csv-parser.js"></script>
