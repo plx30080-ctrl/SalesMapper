@@ -1036,15 +1036,13 @@ function openEditModal() {
 
     const properties = currentEditingFeature.properties;
 
-    // Create form fields for each property (exclude system fields)
-    for (let [key, value] of Object.entries(properties)) {
-        if (['layerId', 'wkt', 'id'].includes(key.toLowerCase())) continue;
-
+    // Helper function to create form field
+    const createFormField = (key, value = '') => {
         const formGroup = document.createElement('div');
         formGroup.className = 'form-group';
 
         const label = document.createElement('label');
-        label.textContent = key;
+        label.textContent = key.charAt(0).toUpperCase() + key.slice(1);
         label.setAttribute('for', `edit_${key}`);
 
         const input = document.createElement('input');
@@ -1056,6 +1054,29 @@ function openEditModal() {
         formGroup.appendChild(label);
         formGroup.appendChild(input);
         formFields.appendChild(formGroup);
+    };
+
+    // Priority fields that should always be shown first
+    const priorityFields = ['name', 'description', 'territory', 'bdm', 'tier'];
+    const systemFields = ['layerid', 'wkt', 'id'];
+    const addedFields = new Set();
+
+    // Add priority fields first (always visible)
+    priorityFields.forEach(field => {
+        const value = properties[field] || properties[field.toLowerCase()] ||
+                     properties[field.toUpperCase()] ||
+                     properties[field.charAt(0).toUpperCase() + field.slice(1)] || '';
+
+        createFormField(field, value);
+        addedFields.add(field.toLowerCase());
+    });
+
+    // Add remaining properties (except system fields and already added)
+    for (let [key, value] of Object.entries(properties)) {
+        const keyLower = key.toLowerCase();
+        if (systemFields.includes(keyLower) || addedFields.has(keyLower)) continue;
+
+        createFormField(key, value);
     }
 
     showModal('editModal');
