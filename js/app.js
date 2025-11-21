@@ -1,5 +1,5 @@
 /**
- * Main Application
+ * Main Application - Updated with Layer Groups and Property-Based Styling
  * Coordinates all components and handles user interactions
  */
 
@@ -12,8 +12,11 @@ let layerManager;
 let csvParser;
 let geocodingService;
 let currentEditingFeature = null;
-let currentCSVData = null; // Store CSV data for geocoding
+let currentCSVData = null;
 let realtimeListenerEnabled = false;
+let layerGroups = new Map(); // groupId -> {name, layerIds: []}
+let activeGroup = null;
+let currentLayerForActions = null;
 
 /**
  * Initialize the application
@@ -33,6 +36,9 @@ async function initializeApp() {
         // Setup event listeners
         setupEventListeners();
 
+        // Setup map click handler for closing popup
+        setupMapClickHandler();
+
         // Setup map feature click handler
         mapManager.setOnFeatureClick(handleFeatureSelection);
 
@@ -44,6 +50,9 @@ async function initializeApp() {
 
         // Setup real-time Firebase listener
         enableRealtimeSync();
+
+        // Initialize with default group
+        createLayerGroup('All Layers');
 
         console.log('Application initialized successfully');
         hideLoading();
@@ -57,32 +66,61 @@ async function initializeApp() {
 }
 
 /**
+ * Setup map click handler to close popups
+ */
+function setupMapClickHandler() {
+    mapManager.map.events.add('click', (e) => {
+        // Check if click was on map background (not on a feature)
+        if (!e.shapes || e.shapes.length === 0) {
+            // Clear selection and close popup
+            mapManager.clearSelectedFeature();
+            currentEditingFeature = null;
+
+            // Reset feature info panel
+            document.getElementById('featureInfo').innerHTML =
+                '<p class="empty-state">Click on a feature to see details</p>';
+        }
+    });
+}
+
+/**
  * Setup event listeners
  */
 function setupEventListeners() {
+    // Quick Action Buttons
+    document.getElementById('showUploadBtn').addEventListener('click', () => showModal('uploadModal'));
+    document.getElementById('showSearchBtn').addEventListener('click', () => showModal('searchModal'));
+    document.getElementById('showDrawToolsBtn').addEventListener('click', () => showModal('drawToolsModal'));
+    document.getElementById('showFilterBtn').addEventListener('click', () => showModal('filterModal'));
+
     // CSV Upload
     document.getElementById('uploadBtn').addEventListener('click', handleCSVUpload);
     document.getElementById('csvFileInput').addEventListener('change', (e) => {
-        if (e.target.files.length > 0) {
-            document.getElementById('uploadBtn').disabled = false;
-        }
+        document.getElementById('uploadBtn').disabled = e.target.files.length === 0;
     });
 
     // Address Search
     document.getElementById('searchBtn').addEventListener('click', handleAddressSearch);
     document.getElementById('addressSearch').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            handleAddressSearch();
-        }
+        if (e.key === 'Enter') handleAddressSearch();
     });
 
     // Drawing Tools
-    document.getElementById('drawPointBtn').addEventListener('click', () => startDrawingMode('point'));
-    document.getElementById('drawPolygonBtn').addEventListener('click', () => startDrawingMode('polygon'));
+    document.getElementById('drawPointBtn').addEventListener('click', () => {
+        startDrawingMode('point');
+        closeModal('drawToolsModal');
+    });
+    document.getElementById('drawPolygonBtn').addEventListener('click', () => {
+        startDrawingMode('polygon');
+        closeModal('drawToolsModal');
+    });
     document.getElementById('deleteDrawingBtn').addEventListener('click', handleDeleteDrawing);
 
+    // Layer Group Management
+    document.getElementById('addGroupBtn').addEventListener('click', handleAddGroup);
+
     // Layer Management
-    document.getElementById('createLayerBtn').addEventListener('click', handleCreateLayer);
+    document.getElementById('addLayerBtn').addEventListener('click', () => showModal('uploadModal'));
 
     // Filtering
     document.getElementById('applyFilterBtn').addEventListener('click', handleApplyFilter);
@@ -102,30 +140,156 @@ function setupEventListeners() {
     document.getElementById('resetView').addEventListener('click', () => mapManager.resetView());
 
     // Edit Modal
-    document.getElementById('cancelEdit').addEventListener('click', closeEditModal);
+    document.getElementById('cancelEdit').addEventListener('click', () => closeModal('editModal'));
     document.getElementById('deleteFeature').addEventListener('click', handleDeleteFeature);
     document.getElementById('editForm').addEventListener('submit', handleEditFormSubmit);
 
     // Column Mapping Modal
     document.getElementById('columnMapForm').addEventListener('submit', handleColumnMapSubmit);
-    document.getElementById('cancelMapping').addEventListener('click', closeColumnMapModal);
+    document.getElementById('cancelMapping').addEventListener('click', () => closeModal('columnMapModal'));
+
+    // Style Modal
+    document.getElementById('styleType').addEventListener('change', handleStyleTypeChange);
+    document.getElementById('applyStyleBtn').addEventListener('click', handleApplyStyle);
+    document.getElementById('cancelStyleBtn').addEventListener('click', () => closeModal('styleModal'));
+
+    // Layer Actions Menu
+    document.querySelectorAll('.context-menu-item').forEach(item => {
+        item.addEventListener('click', handleLayerAction);
+    });
 
     // Modal close buttons
     document.querySelectorAll('.close').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const modalId = e.target.dataset.modal;
-            if (modalId) {
-                document.getElementById(modalId).classList.remove('show');
-            }
+            if (modalId) closeModal(modalId);
         });
     });
 
-    // Close modals when clicking outside
+    // Close modals and menus when clicking outside
     window.addEventListener('click', (e) => {
         if (e.target.classList.contains('modal')) {
-            e.target.classList.remove('show');
+            closeModal(e.target.id);
+        }
+        // Close context menu
+        const contextMenu = document.getElementById('layerActionsMenu');
+        if (!e.target.closest('.layer-menu-btn') && !e.target.closest('.context-menu')) {
+            contextMenu.classList.remove('show');
         }
     });
+}
+
+/**
+ * Show/close modal helpers
+ */
+function showModal(modalId) {
+    document.getElementById(modalId).classList.add('show');
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).classList.remove('show');
+}
+
+/**
+ * Handle layer group creation
+ */
+function handleAddGroup() {
+    const name = prompt('Enter group name:', 'New Group');
+    if (!name) return;
+
+    createLayerGroup(name);
+    showToast(`Group "${name}" created`, 'success');
+}
+
+/**
+ * Create a layer group
+ */
+function createLayerGroup(name) {
+    const groupId = `group_${Date.now()}`;
+    layerGroups.set(groupId, {
+        id: groupId,
+        name: name,
+        layerIds: [],
+        visible: true
+    });
+
+    updateLayerGroupList();
+    return groupId;
+}
+
+/**
+ * Update layer group list
+ */
+function updateLayerGroupList() {
+    const groupList = document.getElementById('layerGroupList');
+    groupList.innerHTML = '';
+
+    if (layerGroups.size === 0) {
+        groupList.innerHTML = '<p class="empty-state">No groups. Click + to add one.</p>';
+        return;
+    }
+
+    layerGroups.forEach(group => {
+        const groupItem = document.createElement('div');
+        groupItem.className = 'layer-group-item' + (activeGroup === group.id ? ' active' : '');
+        groupItem.dataset.groupId = group.id;
+
+        const layerCount = group.layerIds.length;
+
+        groupItem.innerHTML = `
+            <input type="checkbox" class="layer-group-toggle" ${group.visible ? 'checked' : ''}>
+            <span class="layer-group-name">${group.name}</span>
+            <span class="layer-group-count">${layerCount}</span>
+        `;
+
+        // Toggle group visibility
+        groupItem.querySelector('.layer-group-toggle').addEventListener('click', (e) => {
+            e.stopPropagation();
+            group.visible = e.target.checked;
+            toggleGroupVisibility(group.id, group.visible);
+        });
+
+        // Select group
+        groupItem.addEventListener('click', (e) => {
+            if (!e.target.classList.contains('layer-group-toggle')) {
+                selectGroup(group.id);
+            }
+        });
+
+        groupList.appendChild(groupItem);
+    });
+}
+
+/**
+ * Select a layer group
+ */
+function selectGroup(groupId) {
+    activeGroup = groupId;
+    updateLayerGroupList();
+    updateLayerList(layerManager.getAllLayers());
+}
+
+/**
+ * Toggle group visibility
+ */
+function toggleGroupVisibility(groupId, visible) {
+    const group = layerGroups.get(groupId);
+    if (!group) return;
+
+    group.layerIds.forEach(layerId => {
+        const layer = layerManager.getLayer(layerId);
+        if (layer) {
+            if (visible) {
+                mapManager.toggleLayerVisibility(layerId, true);
+                layer.visible = true;
+            } else {
+                mapManager.toggleLayerVisibility(layerId, false);
+                layer.visible = false;
+            }
+        }
+    });
+
+    layerManager.notifyUpdate();
 }
 
 /**
@@ -144,12 +308,12 @@ async function handleAddressSearch() {
 
     try {
         const result = await mapManager.searchAddress(query);
-
         hideLoading();
 
         if (result.success) {
             showToast(`Found: ${result.address}`, 'success');
             searchInput.value = '';
+            closeModal('searchModal');
         } else {
             showToast(`No results found for "${query}"`, 'error');
         }
@@ -161,36 +325,30 @@ async function handleAddressSearch() {
 
 /**
  * Start drawing mode
- * @param {string} type - Type of drawing ('point' or 'polygon')
  */
 function startDrawingMode(type) {
     const mode = type === 'point' ? 'draw-point' : 'draw-polygon';
     mapManager.startDrawing(mode);
 
-    const statusText = type === 'point' ? 'Click on the map to add a point' : 'Click to draw polygon vertices';
+    const statusText = type === 'point' ? 'Click on the map to add a point' : 'Click to draw polygon vertices. Double-click to finish.';
     document.getElementById('drawingStatus').textContent = statusText;
 
-    showToast(`Drawing mode: ${type}. Click on map to draw.`, 'info');
+    showToast(`Drawing mode: ${type}. ${statusText}`, 'info');
 }
 
 /**
  * Handle drawing complete
- * @param {Object} shape - Drawn shape
  */
 function handleDrawingComplete(shape) {
     mapManager.stopDrawing();
     document.getElementById('drawingStatus').textContent = 'Select a tool to start drawing';
 
-    // Prompt for feature name
     const name = prompt('Enter a name for this feature:', 'New Feature');
-
     if (!name) {
-        // User cancelled, remove the shape
         mapManager.clearDrawings();
         return;
     }
 
-    // Get shape properties
     const geometry = shape.toJson();
     const properties = {
         name: name,
@@ -198,34 +356,24 @@ function handleDrawingComplete(shape) {
         source: 'manual'
     };
 
-    // Determine layer to add to
     const layers = layerManager.getAllLayers();
     let targetLayerId;
 
     if (layers.length === 0) {
-        // Create new layer
         targetLayerId = layerManager.createLayer('Drawn Features');
+        addLayerToGroup(targetLayerId, Array.from(layerGroups.keys())[0]);
     } else {
-        // Use first layer or prompt
         targetLayerId = layers[0].id;
     }
 
-    // Create feature
-    const feature = {
-        ...properties,
-        ...geometry
-    };
-
-    // Add to layer
+    const feature = { ...properties, ...geometry };
     const layer = layerManager.getLayer(targetLayerId);
     if (layer) {
         layer.features.push(feature);
         layerManager.notifyUpdate();
     }
 
-    // Clear drawing
     mapManager.clearDrawings();
-
     showToast('Feature added successfully', 'success');
 }
 
@@ -234,7 +382,6 @@ function handleDrawingComplete(shape) {
  */
 function handleDeleteDrawing() {
     const deleted = mapManager.deleteSelectedDrawing();
-
     if (deleted) {
         showToast('Drawing deleted', 'success');
     } else {
@@ -254,52 +401,44 @@ async function handleCSVUpload() {
         return;
     }
 
+    closeModal('uploadModal');
     showLoading('Parsing CSV file...');
 
     try {
-        // Parse CSV
         const parsed = await csvParser.parseFile(file);
-
         console.log('CSV parsed:', parsed);
 
-        // Check if geocoding is needed
         if (parsed.needsGeocoding) {
             hideLoading();
-
-            // Store CSV data
             currentCSVData = parsed;
-
-            // Auto-detect address columns
             const detectedMapping = geocodingService.detectAddressColumns(parsed.originalColumns);
-
-            // Show column mapping modal
             showColumnMapModal(parsed.originalColumns, detectedMapping);
             return;
         }
 
-        // Prompt for layer name
         const layerName = prompt('Enter layer name:', file.name.replace('.csv', ''));
-
         if (!layerName) {
             hideLoading();
             return;
         }
 
-        // Create layer with features
         const layerId = layerManager.createLayer(layerName, parsed.features, parsed.type, {
             sourceFile: file.name,
             columnMap: parsed.columnMap,
             importDate: new Date().toISOString()
         });
 
+        // Add to active group
+        if (activeGroup) {
+            addLayerToGroup(layerId, activeGroup);
+        }
+
         hideLoading();
         showToast(`Layer "${layerName}" created with ${parsed.features.length} features`, 'success');
 
-        // Clear file input
         fileInput.value = '';
         document.getElementById('uploadBtn').disabled = true;
 
-        // Update filter/sort dropdowns with new columns
         updateColumnSelects();
     } catch (error) {
         console.error('Error uploading CSV:', error);
@@ -309,19 +448,26 @@ async function handleCSVUpload() {
 }
 
 /**
+ * Add layer to group
+ */
+function addLayerToGroup(layerId, groupId) {
+    const group = layerGroups.get(groupId);
+    if (group && !group.layerIds.includes(layerId)) {
+        group.layerIds.push(layerId);
+        updateLayerGroupList();
+    }
+}
+
+/**
  * Show column mapping modal
- * @param {Array} columns - Available columns
- * @param {Object} detectedMapping - Auto-detected column mapping
  */
 function showColumnMapModal(columns, detectedMapping) {
     const modal = document.getElementById('columnMapModal');
-
-    // Populate dropdowns
     const selects = ['street1Column', 'street2Column', 'cityColumn', 'stateColumn', 'zipColumn'];
 
     selects.forEach(selectId => {
         const select = document.getElementById(selectId);
-        select.innerHTML = selectId === 'street1Column' || selectId === 'cityColumn' || selectId === 'zipColumn'
+        select.innerHTML = ['street1Column', 'cityColumn', 'zipColumn'].includes(selectId)
             ? '<option value="">-- Select Column --</option>'
             : '<option value="">-- None --</option>';
 
@@ -332,22 +478,13 @@ function showColumnMapModal(columns, detectedMapping) {
             select.appendChild(option);
         });
 
-        // Set detected value if available
         const mappingKey = selectId.replace('Column', '');
         if (detectedMapping[mappingKey]) {
             select.value = detectedMapping[mappingKey];
         }
     });
 
-    modal.classList.add('show');
-}
-
-/**
- * Close column map modal
- */
-function closeColumnMapModal() {
-    document.getElementById('columnMapModal').classList.remove('show');
-    currentCSVData = null;
+    showModal('columnMapModal');
 }
 
 /**
@@ -361,7 +498,6 @@ async function handleColumnMapSubmit(e) {
         return;
     }
 
-    // Get column mapping
     const columnMapping = {
         street1: document.getElementById('street1Column').value,
         street2: document.getElementById('street2Column').value,
@@ -370,19 +506,14 @@ async function handleColumnMapSubmit(e) {
         zip: document.getElementById('zipColumn').value
     };
 
-    // Validate required fields
     if (!columnMapping.street1 || !columnMapping.city || !columnMapping.zip) {
         showToast('Please select at least Street, City, and Zip columns', 'warning');
         return;
     }
 
-    // Close modal
-    closeColumnMapModal();
+    closeModal('columnMapModal');
+    showModal('geocodingModal');
 
-    // Show geocoding progress modal
-    showGeocodingModal();
-
-    // Start geocoding
     try {
         const geocodedFeatures = await geocodingService.geocodeBatch(
             currentCSVData.rawData,
@@ -390,13 +521,9 @@ async function handleColumnMapSubmit(e) {
             updateGeocodingProgress
         );
 
-        // Get statistics
         const stats = geocodingService.getStatistics(geocodedFeatures);
+        closeModal('geocodingModal');
 
-        // Close geocoding modal
-        closeGeocodingModal();
-
-        // Prompt for layer name
         const layerName = prompt(
             `Geocoding complete! ${stats.successful} of ${stats.total} addresses geocoded.\nEnter layer name:`,
             'Geocoded Locations'
@@ -407,62 +534,34 @@ async function handleColumnMapSubmit(e) {
             return;
         }
 
-        // Filter out failed geocodes
         const validFeatures = geocodedFeatures.filter(f => f.latitude && f.longitude);
-
-        // Create layer
         const layerId = layerManager.createLayer(layerName, validFeatures, 'point', {
-            sourceFile: currentCSVData.originalColumns,
             geocoded: true,
             geocodingStats: stats,
             columnMapping: columnMapping,
             importDate: new Date().toISOString()
         });
 
-        showToast(`Layer "${layerName}" created with ${validFeatures.length} geocoded locations`, 'success');
+        if (activeGroup) {
+            addLayerToGroup(layerId, activeGroup);
+        }
 
-        // Update filter/sort dropdowns
+        showToast(`Layer "${layerName}" created with ${validFeatures.length} geocoded locations`, 'success');
         updateColumnSelects();
 
-        // Clear stored data
         currentCSVData = null;
-
-        // Clear file input
-        const fileInput = document.getElementById('csvFileInput');
-        fileInput.value = '';
+        document.getElementById('csvFileInput').value = '';
         document.getElementById('uploadBtn').disabled = true;
 
     } catch (error) {
         console.error('Error geocoding:', error);
-        closeGeocodingModal();
+        closeModal('geocodingModal');
         showToast('Error geocoding addresses: ' + error.message, 'error');
     }
 }
 
 /**
- * Show geocoding progress modal
- */
-function showGeocodingModal() {
-    const modal = document.getElementById('geocodingModal');
-    modal.classList.add('show');
-
-    // Reset progress
-    document.getElementById('geocodingProgress').style.width = '0%';
-    document.getElementById('geocodingProgress').textContent = '';
-    document.getElementById('geocodingStatus').textContent = 'Starting geocoding...';
-    document.getElementById('geocodingStats').textContent = '';
-}
-
-/**
- * Close geocoding modal
- */
-function closeGeocodingModal() {
-    document.getElementById('geocodingModal').classList.remove('show');
-}
-
-/**
  * Update geocoding progress
- * @param {Object} progress - Progress information
  */
 function updateGeocodingProgress(progress) {
     const progressBar = document.getElementById('geocodingProgress');
@@ -477,49 +576,36 @@ function updateGeocodingProgress(progress) {
 }
 
 /**
- * Handle create empty layer
- */
-function handleCreateLayer() {
-    const nameInput = document.getElementById('newLayerName');
-    const name = nameInput.value.trim();
-
-    if (!name) {
-        showToast('Please enter a layer name', 'warning');
-        return;
-    }
-
-    // Create empty layer
-    layerManager.createLayer(name);
-
-    showToast(`Layer "${name}" created`, 'success');
-
-    // Clear input
-    nameInput.value = '';
-}
-
-/**
  * Update layer list in sidebar
  */
 function updateLayerList(layers) {
     const layerList = document.getElementById('layerList');
     layerList.innerHTML = '';
 
-    if (layers.length === 0) {
-        layerList.innerHTML = '<p class="empty-state">No layers yet. Upload a CSV to create one.</p>';
+    // Filter layers by active group
+    let displayLayers = layers;
+    if (activeGroup) {
+        const group = layerGroups.get(activeGroup);
+        if (group) {
+            displayLayers = layers.filter(l => group.layerIds.includes(l.id));
+        }
+    }
+
+    if (displayLayers.length === 0) {
+        layerList.innerHTML = '<p class="empty-state">No layers in this group. Upload a CSV to add one.</p>';
         return;
     }
 
-    layers.forEach(layer => {
+    displayLayers.forEach(layer => {
         const layerItem = createLayerItem(layer);
         layerList.appendChild(layerItem);
     });
 
-    // Update legend
-    updateLegend(layers);
+    updateLegend(layers.filter(l => l.visible));
 }
 
 /**
- * Create layer item element
+ * Create layer item element (compact version)
  */
 function createLayerItem(layer) {
     const div = document.createElement('div');
@@ -529,14 +615,10 @@ function createLayerItem(layer) {
     div.innerHTML = `
         <div class="layer-info">
             <input type="checkbox" class="layer-checkbox" ${layer.visible ? 'checked' : ''}>
-            <span class="layer-name">${layer.name}</span>
+            <span class="layer-name" title="${layer.name}">${layer.name}</span>
             <span class="layer-count">${layer.features.length}</span>
         </div>
-        <div class="layer-actions">
-            <button class="layer-btn zoom" title="Zoom to layer">🔍</button>
-            <button class="layer-btn export" title="Export layer">📥</button>
-            <button class="layer-btn delete" title="Delete layer">🗑️</button>
-        </div>
+        <button class="layer-menu-btn">⋮</button>
     `;
 
     // Visibility toggle
@@ -545,33 +627,280 @@ function createLayerItem(layer) {
         layerManager.toggleLayerVisibility(layer.id);
     });
 
-    // Zoom to layer
-    div.querySelector('.zoom').addEventListener('click', (e) => {
+    // Layer menu button
+    div.querySelector('.layer-menu-btn').addEventListener('click', (e) => {
         e.stopPropagation();
-        const dataSource = mapManager.dataSources.get(layer.id);
-        if (dataSource) {
-            mapManager.fitMapToDataSource(dataSource);
-        }
-    });
-
-    // Export layer
-    div.querySelector('.export').addEventListener('click', (e) => {
-        e.stopPropagation();
-        const features = layerManager.getLayer(layer.id).features;
-        csvParser.exportToCSV(features, `${layer.name}.csv`);
-        showToast(`Layer "${layer.name}" exported`, 'success');
-    });
-
-    // Delete layer
-    div.querySelector('.delete').addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (confirm(`Delete layer "${layer.name}"?`)) {
-            layerManager.deleteLayer(layer.id);
-            showToast(`Layer "${layer.name}" deleted`, 'success');
-        }
+        showLayerActionsMenu(e.target, layer.id);
     });
 
     return div;
+}
+
+/**
+ * Show layer actions context menu
+ */
+function showLayerActionsMenu(button, layerId) {
+    const menu = document.getElementById('layerActionsMenu');
+    const rect = button.getBoundingClientRect();
+
+    menu.style.top = `${rect.bottom + 5}px`;
+    menu.style.left = `${rect.left - 150}px`;
+    menu.classList.add('show');
+
+    currentLayerForActions = layerId;
+}
+
+/**
+ * Handle layer action
+ */
+function handleLayerAction(e) {
+    const action = e.currentTarget.dataset.action;
+    const layerId = currentLayerForActions;
+    const layer = layerManager.getLayer(layerId);
+
+    if (!layer) return;
+
+    document.getElementById('layerActionsMenu').classList.remove('show');
+
+    switch (action) {
+        case 'zoom':
+            const dataSource = mapManager.dataSources.get(layerId);
+            if (dataSource) {
+                mapManager.fitMapToDataSource(dataSource);
+            }
+            break;
+
+        case 'style':
+            showStyleModal(layerId);
+            break;
+
+        case 'export':
+            csvParser.exportToCSV(layer.features, `${layer.name}.csv`);
+            showToast(`Layer "${layer.name}" exported`, 'success');
+            break;
+
+        case 'group':
+            showMoveToGroupDialog(layerId);
+            break;
+
+        case 'delete':
+            if (confirm(`Delete layer "${layer.name}"?`)) {
+                layerManager.deleteLayer(layerId);
+                removeLayerFromAllGroups(layerId);
+                showToast(`Layer "${layer.name}" deleted`, 'success');
+            }
+            break;
+    }
+}
+
+/**
+ * Show style modal for layer
+ */
+function showStyleModal(layerId) {
+    currentLayerForActions = layerId;
+    const layer = layerManager.getLayer(layerId);
+
+    // Populate custom property dropdown
+    const columns = layerManager.getAllColumnNames();
+    const select = document.getElementById('customProperty');
+    select.innerHTML = '<option value="">Select property...</option>';
+    columns.forEach(col => {
+        const option = document.createElement('option');
+        option.value = col;
+        option.textContent = col;
+        select.appendChild(option);
+    });
+
+    showModal('styleModal');
+}
+
+/**
+ * Handle style type change
+ */
+function handleStyleTypeChange(e) {
+    const styleType = e.target.value;
+    const customGroup = document.getElementById('customPropertyGroup');
+    const colorGroup = document.getElementById('singleColorGroup');
+
+    if (styleType === 'custom') {
+        customGroup.style.display = 'block';
+        colorGroup.style.display = 'none';
+    } else if (styleType === 'single') {
+        customGroup.style.display = 'none';
+        colorGroup.style.display = 'block';
+    } else {
+        customGroup.style.display = 'none';
+        colorGroup.style.display = 'none';
+    }
+}
+
+/**
+ * Apply style to layer
+ */
+function handleApplyStyle() {
+    const layerId = currentLayerForActions;
+    const layer = layerManager.getLayer(layerId);
+    if (!layer) return;
+
+    const styleType = document.getElementById('styleType').value;
+    let property = null;
+
+    switch (styleType) {
+        case 'tier':
+            property = 'tier';
+            break;
+        case 'zone':
+            property = 'name'; // or territory, zone, etc.
+            break;
+        case 'bdm':
+            property = 'bdm';
+            break;
+        case 'custom':
+            property = document.getElementById('customProperty').value;
+            if (!property) {
+                showToast('Please select a property', 'warning');
+                return;
+            }
+            break;
+    }
+
+    closeModal('styleModal');
+    showLoading('Applying style...');
+
+    try {
+        if (styleType === 'single') {
+            const color = document.getElementById('singleColor').value;
+            applySingleColorStyle(layerId, color);
+        } else {
+            applyPropertyBasedStyle(layerId, property, styleType);
+        }
+
+        hideLoading();
+        showToast('Style applied successfully', 'success');
+    } catch (error) {
+        hideLoading();
+        showToast('Error applying style: ' + error.message, 'error');
+    }
+}
+
+/**
+ * Apply single color style
+ */
+function applySingleColorStyle(layerId, color) {
+    const layer = layerManager.getLayer(layerId);
+    if (!layer) return;
+
+    layer.color = color;
+
+    // Re-render layer with new color
+    mapManager.removeLayer(layerId);
+    mapManager.createDataSource(layerId);
+    mapManager.addFeaturesToLayer(layerId, layer.features, layer.type);
+
+    layerManager.notifyUpdate();
+}
+
+/**
+ * Apply property-based style (Tier Map, Zone Map, etc.)
+ */
+function applyPropertyBasedStyle(layerId, property, styleType) {
+    const layer = layerManager.getLayer(layerId);
+    if (!layer) return;
+
+    // Get unique values for the property
+    const uniqueValues = [...new Set(layer.features.map(f => f[property]))].filter(v => v != null);
+
+    // Define color schemes
+    const tierColors = {
+        '1': '#107c10',    // Green
+        'tier 1': '#107c10',
+        '2': '#ffb900',    // Yellow
+        'tier 2': '#ffb900',
+        '3': '#d13438',    // Red
+        'tier 3': '#d13438'
+    };
+
+    const defaultColors = [
+        '#0078d4', '#d13438', '#107c10', '#ffb900', '#8764b8',
+        '#00b7c3', '#f7630c', '#ca5010', '#038387', '#486860'
+    ];
+
+    // Create color mapping
+    const colorMap = {};
+    uniqueValues.forEach((value, index) => {
+        if (styleType === 'tier' && tierColors[String(value).toLowerCase()]) {
+            colorMap[value] = tierColors[String(value).toLowerCase()];
+        } else {
+            colorMap[value] = defaultColors[index % defaultColors.length];
+        }
+    });
+
+    // Remove existing layer
+    mapManager.removeLayer(layerId);
+    mapManager.createDataSource(layerId);
+
+    // Group features by property value and add with corresponding colors
+    uniqueValues.forEach(value => {
+        const featuresForValue = layer.features.filter(f => f[property] === value);
+        const color = colorMap[value];
+
+        // Temporarily override color selection
+        const originalGetNextColor = mapManager.getNextColor;
+        mapManager.getNextColor = () => color;
+
+        mapManager.addFeaturesToLayer(layerId, featuresForValue, layer.type);
+
+        mapManager.getNextColor = originalGetNextColor;
+    });
+
+    // Store style info
+    layer.styleType = styleType;
+    layer.styleProperty = property;
+    layer.colorMap = colorMap;
+
+    layerManager.notifyUpdate();
+}
+
+/**
+ * Show move to group dialog
+ */
+function showMoveToGroupDialog(layerId) {
+    const groupNames = [];
+    layerGroups.forEach(g => groupNames.push(g.name));
+
+    const groupName = prompt('Move to group:\n' + groupNames.join('\n') + '\n\nEnter group name:');
+    if (!groupName) return;
+
+    let targetGroupId = null;
+    layerGroups.forEach((g, id) => {
+        if (g.name === groupName) targetGroupId = id;
+    });
+
+    if (!targetGroupId) {
+        showToast('Group not found', 'error');
+        return;
+    }
+
+    // Remove from all groups
+    removeLayerFromAllGroups(layerId);
+
+    // Add to target group
+    addLayerToGroup(layerId, targetGroupId);
+
+    showToast('Layer moved to group', 'success');
+}
+
+/**
+ * Remove layer from all groups
+ */
+function removeLayerFromAllGroups(layerId) {
+    layerGroups.forEach(group => {
+        const index = group.layerIds.indexOf(layerId);
+        if (index > -1) {
+            group.layerIds.splice(index, 1);
+        }
+    });
+    updateLayerGroupList();
 }
 
 /**
@@ -589,13 +918,38 @@ function updateLegend(layers) {
     }
 
     visibleLayers.forEach(layer => {
-        const item = document.createElement('div');
-        item.className = 'legend-item';
-        item.innerHTML = `
-            <div class="legend-color" style="background-color: ${layer.color}"></div>
-            <span>${layer.name} (${layer.features.length})</span>
-        `;
-        legendContent.appendChild(item);
+        // If layer has property-based styling, show color map
+        if (layer.colorMap) {
+            const legendSection = document.createElement('div');
+            legendSection.style.marginBottom = '1rem';
+
+            const title = document.createElement('div');
+            title.style.fontWeight = '600';
+            title.style.marginBottom = '0.5rem';
+            title.textContent = layer.name;
+            legendSection.appendChild(title);
+
+            Object.entries(layer.colorMap).forEach(([value, color]) => {
+                const item = document.createElement('div');
+                item.className = 'legend-item';
+                item.innerHTML = `
+                    <div class="legend-color" style="background-color: ${color}"></div>
+                    <span>${value}</span>
+                `;
+                legendSection.appendChild(item);
+            });
+
+            legendContent.appendChild(legendSection);
+        } else {
+            // Standard legend item
+            const item = document.createElement('div');
+            item.className = 'legend-item';
+            item.innerHTML = `
+                <div class="legend-color" style="background-color: ${layer.color}"></div>
+                <span>${layer.name} (${layer.features.length})</span>
+            `;
+            legendContent.appendChild(item);
+        }
     });
 }
 
@@ -604,30 +958,47 @@ function updateLegend(layers) {
  */
 function handleFeatureSelection(selectedFeature) {
     currentEditingFeature = selectedFeature;
-
-    // Update feature info panel
     updateFeatureInfo(selectedFeature.properties);
-
     console.log('Feature selected:', selectedFeature);
 }
 
 /**
- * Update feature info panel
+ * Update feature info panel - ONLY show Name, Description, Tier, BDM
  */
 function updateFeatureInfo(properties) {
     const featureInfo = document.getElementById('featureInfo');
     featureInfo.innerHTML = '';
 
-    for (let [key, value] of Object.entries(properties)) {
-        if (key !== 'layerId' && value !== null && value !== undefined) {
+    // Define which properties to display (in order)
+    const displayProps = ['name', 'description', 'tier', 'bdm'];
+    const propLabels = {
+        name: 'Name',
+        description: 'Description',
+        tier: 'Tier',
+        bdm: 'BDM'
+    };
+
+    let hasData = false;
+
+    displayProps.forEach(key => {
+        const value = properties[key] || properties[key.toLowerCase()] ||
+                     properties[key.toUpperCase()] || properties[key.charAt(0).toUpperCase() + key.slice(1)];
+
+        if (value !== null && value !== undefined && value !== '') {
+            hasData = true;
             const propDiv = document.createElement('div');
             propDiv.className = 'feature-property';
             propDiv.innerHTML = `
-                <span class="property-label">${key}:</span>
+                <span class="property-label">${propLabels[key]}:</span>
                 <span class="property-value">${value}</span>
             `;
             featureInfo.appendChild(propDiv);
         }
+    });
+
+    if (!hasData) {
+        featureInfo.innerHTML = '<p class="empty-state">No details available</p>';
+        return;
     }
 
     // Add edit button
@@ -649,15 +1020,14 @@ function openEditModal() {
         return;
     }
 
-    const modal = document.getElementById('editModal');
     const formFields = document.getElementById('editFormFields');
     formFields.innerHTML = '';
 
     const properties = currentEditingFeature.properties;
 
-    // Create form fields for each property
+    // Create form fields for each property (exclude system fields)
     for (let [key, value] of Object.entries(properties)) {
-        if (key === 'layerId' || key === 'wkt') continue;
+        if (['layerId', 'wkt', 'id'].includes(key.toLowerCase())) continue;
 
         const formGroup = document.createElement('div');
         formGroup.className = 'form-group';
@@ -677,15 +1047,7 @@ function openEditModal() {
         formFields.appendChild(formGroup);
     }
 
-    modal.classList.add('show');
-}
-
-/**
- * Close edit modal
- */
-function closeEditModal() {
-    const modal = document.getElementById('editModal');
-    modal.classList.remove('show');
+    showModal('editModal');
 }
 
 /**
@@ -703,17 +1065,15 @@ function handleEditFormSubmit(e) {
         updatedProperties[key] = value;
     }
 
-    // Update feature in layer
     layerManager.updateFeature(
         currentEditingFeature.layerId,
         currentEditingFeature.properties.id,
         updatedProperties
     );
 
-    // Update display
     updateFeatureInfo({ ...currentEditingFeature.properties, ...updatedProperties });
 
-    closeEditModal();
+    closeModal('editModal');
     showToast('Feature updated', 'success');
 }
 
@@ -729,7 +1089,7 @@ function handleDeleteFeature() {
             currentEditingFeature.properties.id
         );
 
-        closeEditModal();
+        closeModal('editModal');
         mapManager.clearSelectedFeature();
 
         document.getElementById('featureInfo').innerHTML =
@@ -753,7 +1113,6 @@ function handleApplyFilter() {
         return;
     }
 
-    // Apply filter to all visible layers
     const layers = layerManager.getAllLayers();
     layers.forEach(layer => {
         if (layer.visible) {
@@ -762,6 +1121,7 @@ function handleApplyFilter() {
     });
 
     showToast(`Filter applied: ${column} contains "${value}"`, 'success');
+    closeModal('filterModal');
 }
 
 /**
@@ -788,13 +1148,13 @@ function handleSort(direction) {
         return;
     }
 
-    // Sort all layers
     const layers = layerManager.getAllLayers();
     layers.forEach(layer => {
         layerManager.sortLayer(layer.id, column, direction);
     });
 
     showToast(`Sorted by ${column} (${direction})`, 'success');
+    closeModal('filterModal');
 }
 
 /**
@@ -806,11 +1166,9 @@ function updateColumnSelects() {
     const filterSelect = document.getElementById('filterColumn');
     const sortSelect = document.getElementById('sortColumn');
 
-    // Keep current selections
     const currentFilter = filterSelect.value;
     const currentSort = sortSelect.value;
 
-    // Clear and repopulate
     filterSelect.innerHTML = '<option value="">Select column...</option>';
     sortSelect.innerHTML = '<option value="">Sort by...</option>';
 
@@ -826,13 +1184,8 @@ function updateColumnSelects() {
         sortSelect.appendChild(option2);
     });
 
-    // Restore selections if still available
-    if (columns.includes(currentFilter)) {
-        filterSelect.value = currentFilter;
-    }
-    if (columns.includes(currentSort)) {
-        sortSelect.value = currentSort;
-    }
+    if (columns.includes(currentFilter)) filterSelect.value = currentFilter;
+    if (columns.includes(currentSort)) sortSelect.value = currentSort;
 }
 
 /**
@@ -843,7 +1196,12 @@ async function handleSaveToFirebase() {
 
     try {
         const layersData = layerManager.exportAllLayers();
-        await firebaseManager.saveAllLayers(layersData);
+        const groupsData = Array.from(layerGroups.values());
+
+        await firebaseManager.saveAllLayers({
+            ...layersData,
+            _groups: groupsData
+        });
 
         hideLoading();
         showToast('Data saved to Firebase successfully', 'success');
@@ -870,6 +1228,15 @@ async function handleLoadFromFirebase() {
         const result = await firebaseManager.loadAllLayers();
 
         if (result.layers && Object.keys(result.layers).length > 0) {
+            // Load groups if available
+            if (result.layers._groups) {
+                layerGroups.clear();
+                result.layers._groups.forEach(g => {
+                    layerGroups.set(g.id, g);
+                });
+                delete result.layers._groups;
+            }
+
             layerManager.importLayers(result.layers);
             hideLoading();
             showToast('Data loaded from Firebase successfully', 'success');
@@ -893,8 +1260,15 @@ function enableRealtimeSync() {
     firebaseManager.listenForUpdates((updatedLayers) => {
         console.log('Real-time update received from Firebase');
 
-        // Only import if there are changes and user isn't currently editing
         if (Object.keys(updatedLayers).length > 0 && !document.getElementById('editModal').classList.contains('show')) {
+            if (updatedLayers._groups) {
+                layerGroups.clear();
+                updatedLayers._groups.forEach(g => {
+                    layerGroups.set(g.id, g);
+                });
+                delete updatedLayers._groups;
+            }
+
             layerManager.importLayers(updatedLayers);
             showToast('Data synced from Firebase', 'info');
         }
@@ -923,11 +1297,8 @@ function hideLoading() {
 
 /**
  * Show toast notification
- * @param {string} message - Notification message
- * @param {string} type - Notification type (success, error, warning, info)
  */
 function showToast(message, type = 'info') {
-    // Create toast container if it doesn't exist
     let container = document.querySelector('.toast-container');
     if (!container) {
         container = document.createElement('div');
@@ -935,7 +1306,6 @@ function showToast(message, type = 'info') {
         document.body.appendChild(container);
     }
 
-    // Create toast element
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
 
@@ -952,15 +1322,12 @@ function showToast(message, type = 'info') {
         <span class="toast-close">×</span>
     `;
 
-    // Add close functionality
     toast.querySelector('.toast-close').addEventListener('click', () => {
         toast.remove();
     });
 
-    // Add to container
     container.appendChild(toast);
 
-    // Auto remove after 3 seconds
     setTimeout(() => {
         toast.remove();
     }, 3000);
