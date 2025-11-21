@@ -619,11 +619,23 @@ class MapManager {
         const shapes = dataSource.getShapes();
         if (shapes.length === 0) return;
 
-        const bounds = atlas.data.BoundingBox.fromData(shapes);
-        this.map.setCamera({
-            bounds: bounds,
-            padding: 50
-        });
+        try {
+            const bounds = atlas.data.BoundingBox.fromData(shapes);
+
+            // Validate bounds - check if they contain valid numbers
+            if (bounds &&
+                !isNaN(bounds[0]) && !isNaN(bounds[1]) &&
+                !isNaN(bounds[2]) && !isNaN(bounds[3])) {
+                this.map.setCamera({
+                    bounds: bounds,
+                    padding: 50
+                });
+            } else {
+                console.warn('Invalid bounds detected, skipping map fit:', bounds);
+            }
+        } catch (error) {
+            console.error('Error fitting map to data source:', error);
+        }
     }
 
     /**

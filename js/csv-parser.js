@@ -61,12 +61,15 @@ class CSVParser {
     processData(data, columns) {
         // Detect column mappings
         const columnMap = this.detectColumnMappings(columns);
+        console.log('CSV column mappings detected:', columnMap);
 
         // Detect data type (polygon vs point vs address)
         const dataType = this.detectDataType(columnMap, columns);
+        console.log('CSV data type detected:', dataType);
 
         // If address type, return raw data for geocoding
         if (dataType === 'address') {
+            console.log('Returning address data for geocoding');
             return {
                 features: null,
                 type: dataType,
@@ -80,6 +83,7 @@ class CSVParser {
 
         // Process features
         const features = this.extractFeatures(data, columnMap, dataType);
+        console.log(`Extracted ${features.length} features of type ${dataType}`);
 
         return {
             features: features,

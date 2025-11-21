@@ -827,8 +827,9 @@ function applySingleColorStyle(layerId, color) {
  * Apply property-based style (Tier Map, Zone Map, etc.)
  */
 function applyPropertyBasedStyle(layerId, property, styleType) {
-    const layer = layerManager.getLayer(layerId);
-    if (!layer) return;
+    try {
+        const layer = layerManager.getLayer(layerId);
+        if (!layer) return;
 
     // Find the actual property name (case-insensitive)
     let actualPropertyName = property;
@@ -905,15 +906,20 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
     dataSource.add(geoJsonFeatures);
 
     // Build Azure Maps match expression for data-driven styling
-    // Format: ['match', ['get', 'propertyName'], value1, color1, value2, color2, ..., defaultColor]
-    const matchExpression = ['match', ['get', actualPropertyName]];
+    // Use 'coalesce' to handle null/undefined values by treating them as 'N/A'
+    // Format: ['match', ['coalesce', ['get', 'property'], 'N/A'], value1, color1, ..., defaultColor]
+    const matchExpression = ['match', ['coalesce', ['get', actualPropertyName], 'N/A']];
 
     uniqueValues.forEach(value => {
         matchExpression.push(String(value));  // The value to match
         matchExpression.push(colorMap[value]); // The color for that value
     });
 
-    matchExpression.push('#cccccc'); // Default color for unmatched values
+    // Add explicit handling for 'N/A' (null/undefined values)
+    matchExpression.push('N/A');
+    matchExpression.push('#cccccc'); // Color for null/undefined values
+
+    matchExpression.push('#cccccc'); // Default color for any other unmatched values
 
     // Create layers with data-driven styling
     if (layer.type === 'polygon') {
@@ -972,14 +978,18 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
         });
     });
 
-    // Store style info
-    layer.styleType = styleType;
-    layer.styleProperty = actualPropertyName;
-    layer.colorMap = colorMap;
+        // Store style info
+        layer.styleType = styleType;
+        layer.styleProperty = actualPropertyName;
+        layer.colorMap = colorMap;
 
-    layerManager.notifyUpdate();
+        layerManager.notifyUpdate();
 
-    showToast(`Styled by ${property}`, 'success');
+        showToast(`Styled by ${property}`, 'success');
+    } catch (error) {
+        console.error('Error applying style:', error);
+        showToast('Error applying style: ' + error.message, 'error');
+    }
 }
 
 /**
