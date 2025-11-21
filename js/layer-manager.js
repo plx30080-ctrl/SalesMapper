@@ -1,0 +1,427 @@
+/**
+ * Layer Manager
+ * Manages layer creation, editing, filtering, and sorting
+ */
+
+class LayerManager {
+    constructor(mapManager) {
+        this.mapManager = mapManager;
+        this.layers = new Map(); // layerId -> layer data
+        this.activeFilters = new Map(); // layerId -> filter config
+        this.activeSorts = new Map(); // layerId -> sort config
+        this.onLayerUpdate = null;
+    }
+
+    /**
+     * Create a new layer
+     * @param {string} name - Layer name
+     * @param {Array} features - Array of features
+     * @param {string} type - Layer type ('polygon' or 'point')
+     * @param {Object} metadata - Additional layer metadata
+     * @returns {string} Layer ID
+     */
+    createLayer(name, features = [], type = 'point', metadata = {}) {
+        const layerId = this.generateLayerId(name);
+
+        const layer = {
+            id: layerId,
+            name: name,
+            type: type,
+            features: features,
+            visible: true,
+            color: null,
+            metadata: metadata,
+            createdAt: new Date().toISOString()
+        };
+
+        // Store layer
+        this.layers.set(layerId, layer);
+
+        // Add to map if there are features
+        if (features.length > 0) {
+            const color = this.mapManager.addFeaturesToLayer(layerId, features, type);
+            layer.color = color;
+        } else {
+            // Create empty data source
+            this.mapManager.createDataSource(layerId);
+            layer.color = this.mapManager.getNextColor();
+        }
+
+        // Notify update
+        this.notifyUpdate();
+
+        return layerId;
+    }
+
+    /**
+     * Add features to an existing layer
+     * @param {string} layerId - Layer ID
+     * @param {Array} features - Array of features to add
+     */
+    addFeaturesToLayer(layerId, features) {
+        const layer = this.layers.get(layerId);
+        if (!layer) {
+            console.error(`Layer ${layerId} not found`);
+            return;
+        }
+
+        // Add to layer data
+        layer.features.push(...features);
+
+        // Add to map
+        this.mapManager.addFeaturesToLayer(layerId, features, layer.type);
+
+        // Notify update
+        this.notifyUpdate();
+    }
+
+    /**
+     * Toggle layer visibility
+     * @param {string} layerId - Layer ID
+     */
+    toggleLayerVisibility(layerId) {
+        const layer = this.layers.get(layerId);
+        if (!layer) return;
+
+        layer.visible = !layer.visible;
+        this.mapManager.toggleLayerVisibility(layerId, layer.visible);
+
+        // Notify update
+        this.notifyUpdate();
+    }
+
+    /**
+     * Delete a layer
+     * @param {string} layerId - Layer ID
+     */
+    deleteLayer(layerId) {
+        const layer = this.layers.get(layerId);
+        if (!layer) return;
+
+        // Remove from map
+        this.mapManager.removeLayer(layerId);
+
+        // Remove from storage
+        this.layers.delete(layerId);
+        this.activeFilters.delete(layerId);
+        this.activeSorts.delete(layerId);
+
+        // Notify update
+        this.notifyUpdate();
+
+        return layer;
+    }
+
+    /**
+     * Get layer by ID
+     * @param {string} layerId - Layer ID
+     * @returns {Object} Layer data
+     */
+    getLayer(layerId) {
+        return this.layers.get(layerId);
+    }
+
+    /**
+     * Get all layers
+     * @returns {Array} Array of all layers
+     */
+    getAllLayers() {
+        return Array.from(this.layers.values());
+    }
+
+    /**
+     * Update feature in a layer
+     * @param {string} layerId - Layer ID
+     * @param {string} featureId - Feature ID
+     * @param {Object} newProperties - Updated properties
+     */
+    updateFeature(layerId, featureId, newProperties) {
+        const layer = this.layers.get(layerId);
+        if (!layer) return;
+
+        // Find and update feature in layer data
+        const featureIndex = layer.features.findIndex(f => f.id === featureId);
+        if (featureIndex !== -1) {
+            layer.features[featureIndex] = {
+                ...layer.features[featureIndex],
+                ...newProperties
+            };
+
+            // Update on map
+            this.mapManager.updateFeatureProperties(layerId, featureId, newProperties);
+
+            // Notify update
+            this.notifyUpdate();
+        }
+    }
+
+    /**
+     * Delete feature from a layer
+     * @param {string} layerId - Layer ID
+     * @param {string} featureId - Feature ID
+     */
+    deleteFeature(layerId, featureId) {
+        const layer = this.layers.get(layerId);
+        if (!layer) return;
+
+        // Remove from layer data
+        layer.features = layer.features.filter(f => f.id !== featureId);
+
+        // Remove from map
+        this.mapManager.removeFeature(layerId, featureId);
+
+        // Notify update
+        this.notifyUpdate();
+    }
+
+    /**
+     * Apply filter to a layer
+     * @param {string} layerId - Layer ID
+     * @param {string} column - Column to filter by
+     * @param {string} value - Filter value
+     */
+    applyFilter(layerId, column, value) {
+        const layer = this.layers.get(layerId);
+        if (!layer) return;
+
+        // Store filter
+        this.activeFilters.set(layerId, { column, value });
+
+        // Get filtered features
+        const filteredFeatures = layer.features.filter(feature => {
+            const featureValue = String(feature[column] || '').toLowerCase();
+            const filterValue = String(value).toLowerCase();
+            return featureValue.includes(filterValue);
+        });
+
+        // Re-render layer with filtered features
+        this.rerenderLayer(layerId, filteredFeatures);
+    }
+
+    /**
+     * Clear filter from a layer
+     * @param {string} layerId - Layer ID
+     */
+    clearFilter(layerId) {
+        const layer = this.layers.get(layerId);
+        if (!layer) return;
+
+        // Remove filter
+        this.activeFilters.delete(layerId);
+
+        // Re-render layer with all features
+        this.rerenderLayer(layerId, layer.features);
+    }
+
+    /**
+     * Sort layer features
+     * @param {string} layerId - Layer ID
+     * @param {string} column - Column to sort by
+     * @param {string} direction - Sort direction ('asc' or 'desc')
+     */
+    sortLayer(layerId, column, direction = 'asc') {
+        const layer = this.layers.get(layerId);
+        if (!layer) return;
+
+        // Store sort config
+        this.activeSorts.set(layerId, { column, direction });
+
+        // Sort features
+        const sortedFeatures = [...layer.features].sort((a, b) => {
+            let aVal = a[column];
+            let bVal = b[column];
+
+            // Handle numeric values
+            if (!isNaN(aVal) && !isNaN(bVal)) {
+                aVal = parseFloat(aVal);
+                bVal = parseFloat(bVal);
+            }
+
+            if (direction === 'asc') {
+                return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
+            } else {
+                return aVal < bVal ? 1 : aVal > bVal ? -1 : 0;
+            }
+        });
+
+        // Update layer features order
+        layer.features = sortedFeatures;
+
+        // Notify update
+        this.notifyUpdate();
+    }
+
+    /**
+     * Re-render a layer with specific features
+     * @param {string} layerId - Layer ID
+     * @param {Array} features - Features to render
+     */
+    rerenderLayer(layerId, features) {
+        const layer = this.layers.get(layerId);
+        if (!layer) return;
+
+        // Remove existing layer from map
+        this.mapManager.removeLayer(layerId);
+
+        // Create new data source
+        this.mapManager.createDataSource(layerId);
+
+        // Add filtered features
+        if (features.length > 0) {
+            this.mapManager.addFeaturesToLayer(layerId, features, layer.type);
+        }
+
+        // Restore visibility state
+        this.mapManager.toggleLayerVisibility(layerId, layer.visible);
+    }
+
+    /**
+     * Get all unique values for a column across all layers
+     * @param {string} column - Column name
+     * @returns {Array} Unique values
+     */
+    getUniqueColumnValues(column) {
+        const values = new Set();
+
+        for (let layer of this.layers.values()) {
+            for (let feature of layer.features) {
+                if (feature[column]) {
+                    values.add(feature[column]);
+                }
+            }
+        }
+
+        return Array.from(values).sort();
+    }
+
+    /**
+     * Get all column names across all layers
+     * @returns {Array} Column names
+     */
+    getAllColumnNames() {
+        const columns = new Set();
+
+        for (let layer of this.layers.values()) {
+            for (let feature of layer.features) {
+                Object.keys(feature).forEach(key => {
+                    // Skip certain properties
+                    if (!['id', 'wkt', 'layerId'].includes(key)) {
+                        columns.add(key);
+                    }
+                });
+            }
+        }
+
+        return Array.from(columns).sort();
+    }
+
+    /**
+     * Export layer data
+     * @param {string} layerId - Layer ID
+     * @returns {Object} Layer data
+     */
+    exportLayer(layerId) {
+        const layer = this.layers.get(layerId);
+        if (!layer) return null;
+
+        return {
+            id: layer.id,
+            name: layer.name,
+            type: layer.type,
+            features: layer.features,
+            metadata: layer.metadata,
+            createdAt: layer.createdAt
+        };
+    }
+
+    /**
+     * Export all layers
+     * @returns {Object} All layers data
+     */
+    exportAllLayers() {
+        const data = {};
+
+        for (let [layerId, layer] of this.layers) {
+            data[layerId] = this.exportLayer(layerId);
+        }
+
+        return data;
+    }
+
+    /**
+     * Import layers from data
+     * @param {Object} data - Layers data
+     */
+    importLayers(data) {
+        // Clear existing layers
+        for (let layerId of this.layers.keys()) {
+            this.deleteLayer(layerId);
+        }
+
+        // Import each layer
+        for (let [layerId, layerData] of Object.entries(data)) {
+            // Create layer
+            const newLayerId = this.createLayer(
+                layerData.name,
+                layerData.features,
+                layerData.type,
+                layerData.metadata
+            );
+
+            // Set visibility
+            if (layerData.visible === false) {
+                this.toggleLayerVisibility(newLayerId);
+            }
+        }
+
+        // Notify update
+        this.notifyUpdate();
+    }
+
+    /**
+     * Generate unique layer ID
+     * @param {string} name - Layer name
+     * @returns {string} Layer ID
+     */
+    generateLayerId(name) {
+        const timestamp = Date.now();
+        const random = Math.random().toString(36).substring(7);
+        const safeName = name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        return `${safeName}_${timestamp}_${random}`;
+    }
+
+    /**
+     * Set update callback
+     * @param {Function} callback - Callback function
+     */
+    setOnLayerUpdate(callback) {
+        this.onLayerUpdate = callback;
+    }
+
+    /**
+     * Notify layer update
+     */
+    notifyUpdate() {
+        if (this.onLayerUpdate) {
+            this.onLayerUpdate(this.getAllLayers());
+        }
+    }
+
+    /**
+     * Get layer statistics
+     * @param {string} layerId - Layer ID
+     * @returns {Object} Layer statistics
+     */
+    getLayerStats(layerId) {
+        const layer = this.layers.get(layerId);
+        if (!layer) return null;
+
+        return {
+            featureCount: layer.features.length,
+            type: layer.type,
+            visible: layer.visible,
+            hasFilter: this.activeFilters.has(layerId),
+            hasSort: this.activeSorts.has(layerId)
+        };
+    }
+}
