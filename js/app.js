@@ -357,6 +357,7 @@ function handleDrawingComplete(shape) {
     const name = prompt('Enter a name for this feature:', 'New Feature');
     if (!name) {
         mapManager.clearDrawings();
+        window.targetLayerForNewFeature = null;
         return;
     }
 
@@ -367,14 +368,21 @@ function handleDrawingComplete(shape) {
         source: 'manual'
     };
 
-    const layers = layerManager.getAllLayers();
     let targetLayerId;
 
-    if (layers.length === 0) {
-        targetLayerId = layerManager.createLayer('Drawn Features');
-        addLayerToGroup(targetLayerId, Array.from(layerGroups.keys())[0]);
+    // Check if we're adding to a specific layer
+    if (window.targetLayerForNewFeature) {
+        targetLayerId = window.targetLayerForNewFeature;
+        window.targetLayerForNewFeature = null;
     } else {
-        targetLayerId = layers[0].id;
+        // Original behavior: add to first layer or create new one
+        const layers = layerManager.getAllLayers();
+        if (layers.length === 0) {
+            targetLayerId = layerManager.createLayer('Drawn Features');
+            addLayerToGroup(targetLayerId, Array.from(layerGroups.keys())[0]);
+        } else {
+            targetLayerId = layers[0].id;
+        }
     }
 
     const feature = { ...properties, ...geometry };
@@ -385,7 +393,7 @@ function handleDrawingComplete(shape) {
     }
 
     mapManager.clearDrawings();
-    showToast('Feature added successfully', 'success');
+    showToast(`Feature added to "${layer.name}"`, 'success');
 }
 
 /**
@@ -642,6 +650,10 @@ function createLayerItem(layer) {
     div.dataset.layerId = layer.id;
 
     div.innerHTML = `
+        <div class="layer-reorder-btns">
+            <button class="layer-move-btn" data-direction="up" title="Move layer up">▲</button>
+            <button class="layer-move-btn" data-direction="down" title="Move layer down">▼</button>
+        </div>
         <div class="layer-info">
             <input type="checkbox" class="layer-checkbox" ${layer.visible ? 'checked' : ''}>
             <span class="layer-name" title="${layer.name}">${layer.name}</span>
@@ -654,6 +666,15 @@ function createLayerItem(layer) {
     div.querySelector('.layer-checkbox').addEventListener('change', (e) => {
         e.stopPropagation();
         layerManager.toggleLayerVisibility(layer.id);
+    });
+
+    // Layer reorder buttons
+    div.querySelectorAll('.layer-move-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const direction = e.target.dataset.direction;
+            layerManager.moveLayer(layer.id, direction);
+        });
     });
 
     // Layer menu button
@@ -692,6 +713,10 @@ function handleLayerAction(e) {
     document.getElementById('layerActionsMenu').classList.remove('show');
 
     switch (action) {
+        case 'add':
+            handleAddFeatureToLayer(layerId, layer);
+            break;
+
         case 'zoom':
             const dataSource = mapManager.dataSources.get(layerId);
             if (dataSource) {
@@ -720,6 +745,24 @@ function handleLayerAction(e) {
             }
             break;
     }
+}
+
+/**
+ * Handle adding a new feature to a specific layer
+ */
+function handleAddFeatureToLayer(layerId, layer) {
+    // Store the target layer for when drawing completes
+    window.targetLayerForNewFeature = layerId;
+
+    // Determine drawing mode based on layer type
+    const mode = layer.type === 'point' ? 'draw-point' : 'draw-polygon';
+    mapManager.startDrawing(mode);
+
+    const statusText = layer.type === 'point'
+        ? `Click on the map to add a point to "${layer.name}"`
+        : `Click to draw polygon vertices for "${layer.name}". Double-click to finish.`;
+
+    showToast(statusText, 'info');
 }
 
 /**
@@ -1181,14 +1224,53 @@ function updateFeatureInfo(properties) {
         return;
     }
 
+    // Add button container
+    const btnContainer = document.createElement('div');
+    btnContainer.style.display = 'flex';
+    btnContainer.style.gap = '0.5rem';
+    btnContainer.style.marginTop = '1rem';
+
     // Add edit button
     const editBtn = document.createElement('button');
     editBtn.className = 'btn btn-primary';
-    editBtn.textContent = 'Edit Feature';
-    editBtn.style.marginTop = '1rem';
-    editBtn.style.width = '100%';
+    editBtn.textContent = 'Edit';
+    editBtn.style.flex = '1';
     editBtn.addEventListener('click', openEditModal);
-    featureInfo.appendChild(editBtn);
+    btnContainer.appendChild(editBtn);
+
+    // Add delete button
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'btn btn-danger';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.style.flex = '1';
+    deleteBtn.addEventListener('click', handleDeleteFeatureFromInfo);
+    btnContainer.appendChild(deleteBtn);
+
+    featureInfo.appendChild(btnContainer);
+}
+
+/**
+ * Handle deleting a feature from the info panel
+ */
+function handleDeleteFeatureFromInfo() {
+    if (!currentEditingFeature) return;
+
+    const featureName = currentEditingFeature.name || 'this feature';
+    if (!confirm(`Delete ${featureName}?`)) {
+        return;
+    }
+
+    layerManager.deleteFeature(currentEditingFeature.layerId, currentEditingFeature.id);
+
+    // Clear selection
+    mapManager.clearSelectedFeature();
+    currentEditingFeature = null;
+
+    // Reset feature info panel
+    document.getElementById('featureInfo').innerHTML =
+        '<p class="empty-state">Click on a feature to see details</p>';
+
+    showToast('Feature deleted', 'success');
 }
 
 /**

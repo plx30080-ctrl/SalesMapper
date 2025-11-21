@@ -7,6 +7,7 @@ class LayerManager {
     constructor(mapManager) {
         this.mapManager = mapManager;
         this.layers = new Map(); // layerId -> layer data
+        this.layerOrder = []; // Array of layer IDs in display order
         this.activeFilters = new Map(); // layerId -> filter config
         this.activeSorts = new Map(); // layerId -> sort config
         this.onLayerUpdate = null;
@@ -36,6 +37,7 @@ class LayerManager {
 
         // Store layer
         this.layers.set(layerId, layer);
+        this.layerOrder.push(layerId);
 
         // Add to map if there are features
         if (features.length > 0) {
@@ -106,6 +108,12 @@ class LayerManager {
         this.activeFilters.delete(layerId);
         this.activeSorts.delete(layerId);
 
+        // Remove from order
+        const index = this.layerOrder.indexOf(layerId);
+        if (index > -1) {
+            this.layerOrder.splice(index, 1);
+        }
+
         // Notify update
         this.notifyUpdate();
 
@@ -126,7 +134,32 @@ class LayerManager {
      * @returns {Array} Array of all layers
      */
     getAllLayers() {
-        return Array.from(this.layers.values());
+        // Return layers in the specified order
+        return this.layerOrder
+            .map(id => this.layers.get(id))
+            .filter(layer => layer !== undefined);
+    }
+
+    /**
+     * Move layer up or down in display order
+     * @param {string} layerId - Layer ID
+     * @param {string} direction - 'up' or 'down'
+     */
+    moveLayer(layerId, direction) {
+        const index = this.layerOrder.indexOf(layerId);
+        if (index === -1) return;
+
+        if (direction === 'up' && index > 0) {
+            // Swap with previous
+            [this.layerOrder[index - 1], this.layerOrder[index]] =
+            [this.layerOrder[index], this.layerOrder[index - 1]];
+            this.notifyUpdate();
+        } else if (direction === 'down' && index < this.layerOrder.length - 1) {
+            // Swap with next
+            [this.layerOrder[index], this.layerOrder[index + 1]] =
+            [this.layerOrder[index + 1], this.layerOrder[index]];
+            this.notifyUpdate();
+        }
     }
 
     /**
@@ -354,10 +387,13 @@ class LayerManager {
      * @returns {Object} All layers data
      */
     exportAllLayers() {
-        const data = {};
+        const data = {
+            layers: {},
+            layerOrder: this.layerOrder
+        };
 
         for (let [layerId, layer] of this.layers) {
-            data[layerId] = this.exportLayer(layerId);
+            data.layers[layerId] = this.exportLayer(layerId);
         }
 
         return data;
@@ -373,8 +409,12 @@ class LayerManager {
             this.deleteLayer(layerId);
         }
 
+        // Handle both old format (direct object) and new format (with layerOrder)
+        const layersData = data.layers || data;
+        const layerOrder = data.layerOrder || Object.keys(layersData);
+
         // Import each layer
-        for (let [layerId, layerData] of Object.entries(data)) {
+        for (let [layerId, layerData] of Object.entries(layersData)) {
             // Create layer object with preserved ID
             const layer = {
                 id: layerId,  // Preserve original ID
@@ -390,7 +430,7 @@ class LayerManager {
                 colorMap: layerData.colorMap
             };
 
-            // Store layer
+            // Store layer (don't add to layerOrder yet)
             this.layers.set(layerId, layer);
 
             // Add to map if there are features and layer is visible
@@ -416,6 +456,9 @@ class LayerManager {
                 layer.color = this.mapManager.getNextColor();
             }
         }
+
+        // Restore layer order
+        this.layerOrder = layerOrder.filter(id => this.layers.has(id));
 
         // Notify update
         this.notifyUpdate();
