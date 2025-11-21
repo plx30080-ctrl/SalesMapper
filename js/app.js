@@ -16,6 +16,7 @@ let currentCSVData = null;
 let realtimeListenerEnabled = false;
 let layerGroups = new Map(); // groupId -> {name, layerIds: []}
 let activeGroup = null;
+let allLayersGroupId = null; // Special group that shows all layers
 let currentLayerForActions = null;
 
 /**
@@ -51,8 +52,8 @@ async function initializeApp() {
         // Setup real-time Firebase listener
         enableRealtimeSync();
 
-        // Initialize with default group
-        createLayerGroup('All Layers');
+        // Initialize with default "All Layers" group
+        allLayersGroupId = createLayerGroup('All Layers');
 
         console.log('Application initialized successfully');
         hideLoading();
@@ -231,10 +232,15 @@ function updateLayerGroupList() {
 
     layerGroups.forEach(group => {
         const groupItem = document.createElement('div');
-        groupItem.className = 'layer-group-item' + (activeGroup === group.id ? ' active' : '');
+        // Highlight "All Layers" when activeGroup is null, or highlight the active group
+        const isActive = (activeGroup === group.id) || (activeGroup === null && group.id === allLayersGroupId);
+        groupItem.className = 'layer-group-item' + (isActive ? ' active' : '');
         groupItem.dataset.groupId = group.id;
 
-        const layerCount = group.layerIds.length;
+        // For "All Layers", show total count of all layers
+        const layerCount = group.id === allLayersGroupId
+            ? layerManager.getAllLayers().length
+            : group.layerIds.length;
 
         groupItem.innerHTML = `
             <input type="checkbox" class="layer-group-toggle" ${group.visible ? 'checked' : ''}>
@@ -264,7 +270,12 @@ function updateLayerGroupList() {
  * Select a layer group
  */
 function selectGroup(groupId) {
-    activeGroup = groupId;
+    // Special handling for "All Layers" - show all layers
+    if (groupId === allLayersGroupId) {
+        activeGroup = null;
+    } else {
+        activeGroup = groupId;
+    }
     updateLayerGroupList();
     updateLayerList(layerManager.getAllLayers());
 }
@@ -1025,15 +1036,13 @@ function openEditModal() {
 
     const properties = currentEditingFeature.properties;
 
-    // Create form fields for each property (exclude system fields)
-    for (let [key, value] of Object.entries(properties)) {
-        if (['layerId', 'wkt', 'id'].includes(key.toLowerCase())) continue;
-
+    // Helper function to create form field
+    const createFormField = (key, value = '') => {
         const formGroup = document.createElement('div');
         formGroup.className = 'form-group';
 
         const label = document.createElement('label');
-        label.textContent = key;
+        label.textContent = key.charAt(0).toUpperCase() + key.slice(1);
         label.setAttribute('for', `edit_${key}`);
 
         const input = document.createElement('input');
@@ -1045,6 +1054,29 @@ function openEditModal() {
         formGroup.appendChild(label);
         formGroup.appendChild(input);
         formFields.appendChild(formGroup);
+    };
+
+    // Priority fields that should always be shown first
+    const priorityFields = ['name', 'description', 'territory', 'bdm', 'tier'];
+    const systemFields = ['layerid', 'wkt', 'id'];
+    const addedFields = new Set();
+
+    // Add priority fields first (always visible)
+    priorityFields.forEach(field => {
+        const value = properties[field] || properties[field.toLowerCase()] ||
+                     properties[field.toUpperCase()] ||
+                     properties[field.charAt(0).toUpperCase() + field.slice(1)] || '';
+
+        createFormField(field, value);
+        addedFields.add(field.toLowerCase());
+    });
+
+    // Add remaining properties (except system fields and already added)
+    for (let [key, value] of Object.entries(properties)) {
+        const keyLower = key.toLowerCase();
+        if (systemFields.includes(keyLower) || addedFields.has(keyLower)) continue;
+
+        createFormField(key, value);
     }
 
     showModal('editModal');
