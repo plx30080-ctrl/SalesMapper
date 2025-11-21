@@ -818,8 +818,20 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
     const layer = layerManager.getLayer(layerId);
     if (!layer) return;
 
+    // Find the actual property name (case-insensitive)
+    let actualPropertyName = property;
+    if (layer.features.length > 0) {
+        const firstFeature = layer.features[0];
+        const foundKey = Object.keys(firstFeature).find(
+            key => key.toLowerCase() === property.toLowerCase()
+        );
+        if (foundKey) {
+            actualPropertyName = foundKey;
+        }
+    }
+
     // Get unique values for the property
-    const uniqueValues = [...new Set(layer.features.map(f => f[property]))].filter(v => v != null);
+    const uniqueValues = [...new Set(layer.features.map(f => f[actualPropertyName]))].filter(v => v != null);
 
     if (uniqueValues.length === 0) {
         showToast(`No values found for property "${property}"`, 'warning');
@@ -882,7 +894,7 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
 
     // Build Azure Maps match expression for data-driven styling
     // Format: ['match', ['get', 'propertyName'], value1, color1, value2, color2, ..., defaultColor]
-    const matchExpression = ['match', ['get', property]];
+    const matchExpression = ['match', ['get', actualPropertyName]];
 
     uniqueValues.forEach(value => {
         matchExpression.push(String(value));  // The value to match
@@ -950,7 +962,7 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
 
     // Store style info
     layer.styleType = styleType;
-    layer.styleProperty = property;
+    layer.styleProperty = actualPropertyName;
     layer.colorMap = colorMap;
 
     layerManager.notifyUpdate();
@@ -1356,6 +1368,14 @@ async function handleLoadFromFirebase() {
             }
 
             layerManager.importLayers(result.layers);
+
+            // Re-apply property-based styling for layers that have it
+            layerManager.getAllLayers().forEach(layer => {
+                if (layer.styleType && layer.styleProperty) {
+                    applyPropertyBasedStyle(layer.id, layer.styleProperty, layer.styleType);
+                }
+            });
+
             hideLoading();
             showToast('Data loaded from Firebase successfully', 'success');
         } else {
@@ -1388,6 +1408,14 @@ function enableRealtimeSync() {
             }
 
             layerManager.importLayers(updatedLayers);
+
+            // Re-apply property-based styling for layers that have it
+            layerManager.getAllLayers().forEach(layer => {
+                if (layer.styleType && layer.styleProperty) {
+                    applyPropertyBasedStyle(layer.id, layer.styleProperty, layer.styleType);
+                }
+            });
+
             showToast('Data synced from Firebase', 'info');
         }
     });

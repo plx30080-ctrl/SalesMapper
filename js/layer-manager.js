@@ -329,8 +329,13 @@ class LayerManager {
             name: layer.name,
             type: layer.type,
             features: layer.features,
+            visible: layer.visible,
+            color: layer.color,
             metadata: layer.metadata,
-            createdAt: layer.createdAt
+            createdAt: layer.createdAt,
+            styleType: layer.styleType,
+            styleProperty: layer.styleProperty,
+            colorMap: layer.colorMap
         };
     }
 
@@ -360,17 +365,45 @@ class LayerManager {
 
         // Import each layer
         for (let [layerId, layerData] of Object.entries(data)) {
-            // Create layer
-            const newLayerId = this.createLayer(
-                layerData.name,
-                layerData.features,
-                layerData.type,
-                layerData.metadata
-            );
+            // Create layer object with preserved ID
+            const layer = {
+                id: layerId,  // Preserve original ID
+                name: layerData.name,
+                type: layerData.type,
+                features: layerData.features || [],
+                visible: layerData.visible !== undefined ? layerData.visible : true,
+                color: layerData.color || null,
+                metadata: layerData.metadata || {},
+                createdAt: layerData.createdAt || new Date().toISOString(),
+                styleType: layerData.styleType,
+                styleProperty: layerData.styleProperty,
+                colorMap: layerData.colorMap
+            };
 
-            // Set visibility
-            if (layerData.visible === false) {
-                this.toggleLayerVisibility(newLayerId);
+            // Store layer
+            this.layers.set(layerId, layer);
+
+            // Add to map if there are features and layer is visible
+            if (layer.features.length > 0) {
+                // Check if this layer has property-based styling
+                if (layer.styleType && layer.styleProperty && layer.colorMap) {
+                    // Will be re-styled by app.js after import
+                    const color = this.mapManager.addFeaturesToLayer(layerId, layer.features, layer.type);
+                    layer.color = color;
+                } else {
+                    // Normal styling
+                    const color = this.mapManager.addFeaturesToLayer(layerId, layer.features, layer.type);
+                    layer.color = color;
+                }
+
+                // Set visibility on map
+                if (!layer.visible) {
+                    this.mapManager.toggleLayerVisibility(layerId, false);
+                }
+            } else {
+                // Create empty data source
+                this.mapManager.createDataSource(layerId);
+                layer.color = this.mapManager.getNextColor();
             }
         }
 
