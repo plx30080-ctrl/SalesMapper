@@ -939,20 +939,16 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
     dataSource.add(geoJsonFeatures);
 
     // Build Azure Maps match expression for data-driven styling
-    // Use 'coalesce' to handle null/undefined values by treating them as 'N/A'
-    // Format: ['match', ['coalesce', ['get', 'property'], 'N/A'], value1, color1, ..., defaultColor]
-    const matchExpression = ['match', ['coalesce', ['get', actualPropertyName], 'N/A']];
+    // Format: ['match', ['get', 'property'], value1, color1, value2, color2, ..., defaultColor]
+    // Null/undefined values naturally fall through to the default color
+    const matchExpression = ['match', ['get', actualPropertyName]];
 
     uniqueValues.forEach(value => {
         matchExpression.push(value);  // Keep original type (number or string)
         matchExpression.push(colorMap[value]); // The color for that value
     });
 
-    // Add explicit handling for 'N/A' (null/undefined values)
-    matchExpression.push('N/A');
-    matchExpression.push('#cccccc'); // Color for null/undefined values
-
-    matchExpression.push('#cccccc'); // Default color for any other unmatched values
+    matchExpression.push('#cccccc'); // Default color for null/undefined and unmatched values
 
     console.log('Match expression built:', JSON.stringify(matchExpression, null, 2));
     console.log('=== END TIER STYLING DEBUG ===');
