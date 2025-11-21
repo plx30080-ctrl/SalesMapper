@@ -8,8 +8,9 @@ class CSVParser {
         this.supportedColumns = {
             // Geometry columns
             wkt: ['wkt', 'geometry', 'shape', 'geom', 'polygon', 'the_geom'],
-            latitude: ['latitude', 'lat', 'y', 'latitude_decimal'],
-            longitude: ['longitude', 'lon', 'lng', 'long', 'x', 'longitude_decimal'],
+            // Removed 'y' and 'x' to prevent false matches with "Account Type" etc.
+            latitude: ['latitude', 'lat', 'latitude_decimal'],
+            longitude: ['longitude', 'lon', 'lng', 'longitude_decimal'],
 
             // Common attribute columns
             name: ['name', 'title', 'label', 'account_name', 'business_name'],
