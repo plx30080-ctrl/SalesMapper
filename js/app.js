@@ -240,7 +240,7 @@ function updateLayerGroupList() {
         // For "All Layers", show total count of all layers
         const layerCount = group.id === allLayersGroupId
             ? layerManager.getAllLayers().length
-            : group.layerIds.length;
+            : (group.layerIds || []).length;
 
         groupItem.innerHTML = `
             <input type="checkbox" class="layer-group-toggle" ${group.visible ? 'checked' : ''}>
@@ -287,7 +287,7 @@ function toggleGroupVisibility(groupId, visible) {
     const group = layerGroups.get(groupId);
     if (!group) return;
 
-    group.layerIds.forEach(layerId => {
+    (group.layerIds || []).forEach(layerId => {
         const layer = layerManager.getLayer(layerId);
         if (layer) {
             if (visible) {
@@ -475,9 +475,15 @@ async function handleCSVUpload() {
  */
 function addLayerToGroup(layerId, groupId) {
     const group = layerGroups.get(groupId);
-    if (group && !group.layerIds.includes(layerId)) {
-        group.layerIds.push(layerId);
-        updateLayerGroupList();
+    if (group) {
+        // Ensure layerIds array exists
+        if (!group.layerIds) {
+            group.layerIds = [];
+        }
+        if (!group.layerIds.includes(layerId)) {
+            group.layerIds.push(layerId);
+            updateLayerGroupList();
+        }
     }
 }
 
@@ -610,7 +616,7 @@ function updateLayerList(layers) {
     if (activeGroup) {
         const group = layerGroups.get(activeGroup);
         if (group) {
-            displayLayers = layers.filter(l => group.layerIds.includes(l.id));
+            displayLayers = layers.filter(l => (group.layerIds || []).includes(l.id));
         }
     }
 
@@ -1063,6 +1069,9 @@ function showMoveToGroupDialog(layerId) {
  */
 function removeLayerFromAllGroups(layerId) {
     layerGroups.forEach(group => {
+        if (!group.layerIds) {
+            group.layerIds = [];
+        }
         const index = group.layerIds.indexOf(layerId);
         if (index > -1) {
             group.layerIds.splice(index, 1);
