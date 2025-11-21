@@ -1107,6 +1107,12 @@ function updateFeatureInfo(properties) {
     const featureInfo = document.getElementById('featureInfo');
     featureInfo.innerHTML = '';
 
+    // Handle null/undefined properties
+    if (!properties || typeof properties !== 'object') {
+        featureInfo.innerHTML = '<p class="empty-state">No details available</p>';
+        return;
+    }
+
     // Define which properties to display (in order)
     const displayProps = ['name', 'description', 'tier', 'bdm'];
     const propLabels = {
@@ -1120,7 +1126,8 @@ function updateFeatureInfo(properties) {
 
     displayProps.forEach(key => {
         const value = properties[key] || properties[key.toLowerCase()] ||
-                     properties[key.toUpperCase()] || properties[key.charAt(0).toUpperCase() + key.slice(1)];
+                     properties[key.toUpperCase()] ||
+                     properties[key.charAt(0).toUpperCase() + key.slice(1)];
 
         if (value !== null && value !== undefined && value !== '') {
             hasData = true;
