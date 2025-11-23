@@ -1031,6 +1031,24 @@ body {
     opacity: 0.6;
 }
 
+/* ===== Template Controls ===== */
+.template-controls {
+    background: var(--bg-secondary);
+    padding: 1rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+}
+
+.template-controls .form-group {
+    margin-bottom: 0;
+}
+
+.btn-small {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
 /* ===== Validation Results ===== */
 .modal-large {
     max-width: 700px;

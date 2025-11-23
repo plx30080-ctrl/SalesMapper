@@ -149,6 +149,12 @@ function setupEventListeners() {
     document.getElementById('columnMapForm').addEventListener('submit', handleColumnMapSubmit);
     document.getElementById('cancelMapping').addEventListener('click', () => closeModal('columnMapModal'));
 
+    // Template Controls
+    document.getElementById('saveTemplateBtn').addEventListener('click', handleSaveTemplate);
+    document.getElementById('loadTemplateBtn').addEventListener('click', handleLoadTemplate);
+    document.getElementById('deleteTemplateBtn').addEventListener('click', handleDeleteTemplate);
+    document.getElementById('templateSelect').addEventListener('change', handleTemplateSelectChange);
+
     // Style Modal
     document.getElementById('styleType').addEventListener('change', handleStyleTypeChange);
     document.getElementById('applyStyleBtn').addEventListener('click', handleApplyStyle);
@@ -985,6 +991,9 @@ function showColumnMapModal(columns, detectedMapping) {
         }
     });
 
+    // Update template dropdown
+    updateTemplateSelect();
+
     showModal('columnMapModal');
 }
 
@@ -1078,6 +1087,169 @@ function updateGeocodingProgress(progress) {
 
     statusText.textContent = `Geocoding: ${progress.current} of ${progress.total}`;
     statsText.textContent = `Success: ${progress.successCount} | Failed: ${progress.errorCount}`;
+}
+
+/**
+ * Template Management Functions
+ */
+
+/**
+ * Get all saved templates from localStorage
+ */
+function getTemplates() {
+    try {
+        const templates = localStorage.getItem('columnMappingTemplates');
+        return templates ? JSON.parse(templates) : {};
+    } catch (error) {
+        console.error('Error loading templates:', error);
+        return {};
+    }
+}
+
+/**
+ * Save templates to localStorage
+ */
+function saveTemplates(templates) {
+    try {
+        localStorage.setItem('columnMappingTemplates', JSON.stringify(templates));
+    } catch (error) {
+        console.error('Error saving templates:', error);
+        showToast('Error saving templates', 'error');
+    }
+}
+
+/**
+ * Update template select dropdown
+ */
+function updateTemplateSelect() {
+    const templates = getTemplates();
+    const templateSelect = document.getElementById('templateSelect');
+
+    // Clear existing options except the first one
+    templateSelect.innerHTML = '<option value="">-- No Template --</option>';
+
+    // Add template options
+    Object.keys(templates).forEach(name => {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        templateSelect.appendChild(option);
+    });
+}
+
+/**
+ * Handle template select change
+ */
+function handleTemplateSelectChange() {
+    const templateSelect = document.getElementById('templateSelect');
+    const deleteBtn = document.getElementById('deleteTemplateBtn');
+
+    // Show/hide delete button based on selection
+    if (templateSelect.value) {
+        deleteBtn.style.display = 'inline-block';
+    } else {
+        deleteBtn.style.display = 'none';
+    }
+}
+
+/**
+ * Handle save template button click
+ */
+function handleSaveTemplate() {
+    const columnMapping = {
+        street1: document.getElementById('street1Column').value,
+        street2: document.getElementById('street2Column').value,
+        city: document.getElementById('cityColumn').value,
+        state: document.getElementById('stateColumn').value,
+        zip: document.getElementById('zipColumn').value
+    };
+
+    // Validate that at least required fields are filled
+    if (!columnMapping.street1 || !columnMapping.city || !columnMapping.zip) {
+        showToast('Please select at least Street, City, and Zip columns before saving', 'warning');
+        return;
+    }
+
+    // Prompt for template name
+    const templateName = prompt('Enter a name for this template:');
+    if (!templateName || templateName.trim() === '') {
+        return;
+    }
+
+    // Save template
+    const templates = getTemplates();
+    templates[templateName.trim()] = columnMapping;
+    saveTemplates(templates);
+
+    // Update dropdown
+    updateTemplateSelect();
+
+    // Select the newly saved template
+    document.getElementById('templateSelect').value = templateName.trim();
+    handleTemplateSelectChange();
+
+    showToast(`Template "${templateName}" saved`, 'success');
+}
+
+/**
+ * Handle load template button click
+ */
+function handleLoadTemplate() {
+    const templateSelect = document.getElementById('templateSelect');
+    const templateName = templateSelect.value;
+
+    if (!templateName) {
+        showToast('Please select a template to load', 'warning');
+        return;
+    }
+
+    const templates = getTemplates();
+    const template = templates[templateName];
+
+    if (!template) {
+        showToast('Template not found', 'error');
+        return;
+    }
+
+    // Apply template to form
+    document.getElementById('street1Column').value = template.street1 || '';
+    document.getElementById('street2Column').value = template.street2 || '';
+    document.getElementById('cityColumn').value = template.city || '';
+    document.getElementById('stateColumn').value = template.state || '';
+    document.getElementById('zipColumn').value = template.zip || '';
+
+    showToast(`Template "${templateName}" loaded`, 'success');
+}
+
+/**
+ * Handle delete template button click
+ */
+function handleDeleteTemplate() {
+    const templateSelect = document.getElementById('templateSelect');
+    const templateName = templateSelect.value;
+
+    if (!templateName) {
+        showToast('Please select a template to delete', 'warning');
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to delete template "${templateName}"?`)) {
+        return;
+    }
+
+    // Delete template
+    const templates = getTemplates();
+    delete templates[templateName];
+    saveTemplates(templates);
+
+    // Update dropdown
+    updateTemplateSelect();
+
+    // Reset selection
+    templateSelect.value = '';
+    handleTemplateSelectChange();
+
+    showToast(`Template "${templateName}" deleted`, 'success');
 }
 
 /**

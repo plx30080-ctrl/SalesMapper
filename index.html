@@ -117,6 +117,23 @@
                 </div>
                 <div class="modal-body">
                     <p>Your CSV doesn't have WKT or Lat/Long columns. Please map address columns for geocoding:</p>
+
+                    <!-- Template Controls -->
+                    <div class="template-controls">
+                        <div class="form-group">
+                            <label for="templateSelect">Load Template:</label>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <select id="templateSelect" class="form-select" style="flex: 1;">
+                                    <option value="">-- No Template --</option>
+                                </select>
+                                <button type="button" id="loadTemplateBtn" class="btn btn-small btn-secondary">Load</button>
+                                <button type="button" id="deleteTemplateBtn" class="btn btn-small btn-danger" style="display: none;">Delete</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr style="margin: 1rem 0;">
+
                     <form id="columnMapForm">
                         <div class="form-group">
                             <label for="street1Column">Street 1 / Address:</label>
@@ -150,6 +167,7 @@
                         </div>
                         <div class="modal-actions">
                             <button type="submit" class="btn btn-primary">Geocode Addresses</button>
+                            <button type="button" class="btn btn-secondary" id="saveTemplateBtn">Save as Template</button>
                             <button type="button" class="btn btn-secondary" id="cancelMapping">Cancel</button>
                         </div>
                     </form>
