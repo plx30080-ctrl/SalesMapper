@@ -211,7 +211,8 @@ function createLayerGroup(name) {
         id: groupId,
         name: name,
         layerIds: [],
-        visible: true
+        visible: true,
+        opacity: 1.0
     });
 
     updateLayerGroupList();
@@ -242,10 +243,16 @@ function updateLayerGroupList() {
             ? layerManager.getAllLayers().length
             : (group.layerIds || []).length;
 
+        const groupOpacity = group.opacity !== undefined ? group.opacity : 1.0;
+        const groupOpacityPercent = Math.round(groupOpacity * 100);
+
         groupItem.innerHTML = `
             <input type="checkbox" class="layer-group-toggle" ${group.visible ? 'checked' : ''}>
             <span class="layer-group-name">${group.name}</span>
             <span class="layer-group-count">${layerCount}</span>
+            <div class="layer-opacity-control">
+                <input type="range" class="group-opacity-slider" min="0" max="100" value="${groupOpacityPercent}" title="Group Opacity: ${groupOpacityPercent}%">
+            </div>
         `;
 
         // Toggle group visibility
@@ -255,9 +262,20 @@ function updateLayerGroupList() {
             toggleGroupVisibility(group.id, group.visible);
         });
 
+        // Group opacity slider
+        const groupOpacitySlider = groupItem.querySelector('.group-opacity-slider');
+        groupOpacitySlider.addEventListener('input', (e) => {
+            e.stopPropagation();
+            const newOpacity = parseInt(e.target.value) / 100;
+            e.target.title = `Group Opacity: ${e.target.value}%`;
+            group.opacity = newOpacity;
+            setGroupOpacity(group.id, newOpacity);
+        });
+
         // Select group
         groupItem.addEventListener('click', (e) => {
-            if (!e.target.classList.contains('layer-group-toggle')) {
+            if (!e.target.classList.contains('layer-group-toggle') &&
+                !e.target.classList.contains('group-opacity-slider')) {
                 selectGroup(group.id);
             }
         });
@@ -301,6 +319,28 @@ function toggleGroupVisibility(groupId, visible) {
     });
 
     layerManager.notifyUpdate();
+}
+
+/**
+ * Set opacity for all layers in a group
+ */
+function setGroupOpacity(groupId, opacity) {
+    const group = layerGroups.get(groupId);
+    if (!group) return;
+
+    // Get layer IDs based on group type
+    let layerIds;
+    if (groupId === allLayersGroupId) {
+        // For "All Layers", apply to all layers
+        layerIds = layerManager.getAllLayers().map(l => l.id);
+    } else {
+        layerIds = group.layerIds || [];
+    }
+
+    // Set opacity for each layer in the group
+    layerIds.forEach(layerId => {
+        layerManager.setLayerOpacity(layerId, opacity);
+    });
 }
 
 /**
@@ -379,7 +419,8 @@ function handleDrawingComplete(shape) {
         const layers = layerManager.getAllLayers();
         if (layers.length === 0) {
             targetLayerId = layerManager.createLayer('Drawn Features');
-            addLayerToGroup(targetLayerId, Array.from(layerGroups.keys())[0]);
+            // Always add to "All Layers" group
+            addLayerToGroup(targetLayerId, allLayersGroupId);
         } else {
             targetLayerId = layers[0].id;
         }
@@ -449,8 +490,11 @@ async function handleCSVUpload() {
             importDate: new Date().toISOString()
         });
 
-        // Add to active group
-        if (activeGroup) {
+        // Always add to "All Layers" group
+        addLayerToGroup(layerId, allLayersGroupId);
+
+        // Also add to active group if one is selected (and it's not "All Layers")
+        if (activeGroup && activeGroup !== allLayersGroupId) {
             addLayerToGroup(layerId, activeGroup);
         }
 
@@ -579,7 +623,11 @@ async function handleColumnMapSubmit(e) {
             importDate: new Date().toISOString()
         });
 
-        if (activeGroup) {
+        // Always add to "All Layers" group
+        addLayerToGroup(layerId, allLayersGroupId);
+
+        // Also add to active group if one is selected (and it's not "All Layers")
+        if (activeGroup && activeGroup !== allLayersGroupId) {
             addLayerToGroup(layerId, activeGroup);
         }
 
@@ -649,6 +697,9 @@ function createLayerItem(layer) {
     div.className = 'layer-item';
     div.dataset.layerId = layer.id;
 
+    const opacity = layer.opacity !== undefined ? layer.opacity : 1.0;
+    const opacityPercent = Math.round(opacity * 100);
+
     div.innerHTML = `
         <div class="layer-reorder-btns">
             <button class="layer-move-btn" data-direction="up" title="Move layer up">▲</button>
@@ -658,6 +709,9 @@ function createLayerItem(layer) {
             <input type="checkbox" class="layer-checkbox" ${layer.visible ? 'checked' : ''}>
             <span class="layer-name" title="${layer.name}">${layer.name}</span>
             <span class="layer-count">${layer.features.length}</span>
+        </div>
+        <div class="layer-opacity-control">
+            <input type="range" class="opacity-slider" min="0" max="100" value="${opacityPercent}" title="Opacity: ${opacityPercent}%">
         </div>
         <button class="layer-menu-btn">⋮</button>
     `;
@@ -675,6 +729,15 @@ function createLayerItem(layer) {
             const direction = e.target.dataset.direction;
             layerManager.moveLayer(layer.id, direction);
         });
+    });
+
+    // Opacity slider
+    const opacitySlider = div.querySelector('.opacity-slider');
+    opacitySlider.addEventListener('input', (e) => {
+        e.stopPropagation();
+        const newOpacity = parseInt(e.target.value) / 100;
+        e.target.title = `Opacity: ${e.target.value}%`;
+        layerManager.setLayerOpacity(layer.id, newOpacity);
     });
 
     // Layer menu button

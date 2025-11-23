@@ -325,6 +325,52 @@ body {
     cursor: not-allowed;
 }
 
+.layer-opacity-control {
+    display: flex;
+    align-items: center;
+    margin: 0 0.5rem;
+}
+
+.opacity-slider {
+    width: 60px;
+    height: 4px;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    background: linear-gradient(to right, transparent, var(--primary-color));
+    border-radius: 2px;
+    outline: none;
+}
+
+.opacity-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.opacity-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+.opacity-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+}
+
+.opacity-slider::-moz-range-thumb:hover {
+    transform: scale(1.2);
+}
+
 .layer-menu-btn {
     background: none;
     border: none;
