@@ -296,6 +296,35 @@ body {
     flex-shrink: 0;
 }
 
+.layer-reorder-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-right: 0.25rem;
+}
+
+.layer-move-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0px 4px;
+    font-size: 0.6rem;
+    line-height: 1;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+    border-radius: 2px;
+}
+
+.layer-move-btn:hover {
+    background-color: var(--bg-primary);
+    color: var(--primary-color);
+}
+
+.layer-move-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
 .layer-menu-btn {
     background: none;
     border: none;
