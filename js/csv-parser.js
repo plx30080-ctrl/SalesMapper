@@ -28,11 +28,27 @@ class CSVParser {
     }
 
     /**
+     * Parse file (CSV or Excel)
+     * @param {File} file - CSV or Excel file
+     * @returns {Promise<Object>} Parsed data with features and metadata
+     */
+    async parseFile(file) {
+        // Detect file type
+        const fileExtension = file.name.split('.').pop().toLowerCase();
+
+        if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+            return this.parseExcelFile(file);
+        } else {
+            return this.parseCSVFile(file);
+        }
+    }
+
+    /**
      * Parse CSV file
      * @param {File} file - CSV file
      * @returns {Promise<Object>} Parsed data with features and metadata
      */
-    async parseFile(file) {
+    async parseCSVFile(file) {
         return new Promise((resolve, reject) => {
             Papa.parse(file, {
                 header: true,
@@ -50,6 +66,51 @@ class CSVParser {
                     reject(error);
                 }
             });
+        });
+    }
+
+    /**
+     * Parse Excel file
+     * @param {File} file - Excel file
+     * @returns {Promise<Object>} Parsed data with features and metadata
+     */
+    async parseExcelFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+
+                    // Get first sheet
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+
+                    // Convert to JSON (array of objects)
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+                        defval: null,
+                        raw: false
+                    });
+
+                    // Get column names
+                    const columns = jsonData.length > 0 ? Object.keys(jsonData[0]) : [];
+
+                    console.log(`Parsed Excel file: ${jsonData.length} rows, ${columns.length} columns`);
+
+                    const parsed = this.processData(jsonData, columns);
+                    resolve(parsed);
+                } catch (error) {
+                    console.error('Error parsing Excel file:', error);
+                    reject(error);
+                }
+            };
+
+            reader.onerror = (error) => {
+                reject(error);
+            };
+
+            reader.readAsArrayBuffer(file);
         });
     }
 
@@ -92,6 +153,7 @@ class CSVParser {
             columnMap: columnMap,
             originalColumns: columns,
             rowCount: data.length,
+            rawData: data, // Include raw data for validation
             needsGeocoding: false
         };
     }
@@ -386,5 +448,139 @@ class CSVParser {
         });
 
         return stats;
+    }
+
+    /**
+     * Validate data rows and return validation results
+     * @param {Array} data - Raw data rows
+     * @param {Object} columnMap - Column mappings
+     * @param {string} dataType - Data type (polygon, point, address)
+     * @returns {Object} Validation results with valid/invalid rows and errors
+     */
+    validateData(data, columnMap, dataType) {
+        const validRows = [];
+        const invalidRows = [];
+        const errors = [];
+
+        data.forEach((row, index) => {
+            const rowErrors = [];
+            const rowNum = index + 1; // 1-based for user display
+
+            // Validate based on data type
+            if (dataType === 'polygon') {
+                // Check for WKT column
+                if (!columnMap.wkt || !row[columnMap.wkt]) {
+                    rowErrors.push({
+                        type: 'missing_data',
+                        message: 'Missing WKT geometry data',
+                        field: columnMap.wkt || 'WKT'
+                    });
+                } else {
+                    // Validate WKT format
+                    if (!this.validateWKT(row[columnMap.wkt])) {
+                        rowErrors.push({
+                            type: 'invalid_format',
+                            message: 'Invalid WKT format',
+                            field: columnMap.wkt,
+                            value: row[columnMap.wkt]
+                        });
+                    }
+                }
+            } else if (dataType === 'point') {
+                // Check for latitude
+                if (!columnMap.latitude || row[columnMap.latitude] === null || row[columnMap.latitude] === undefined || row[columnMap.latitude] === '') {
+                    rowErrors.push({
+                        type: 'missing_data',
+                        message: 'Missing latitude data',
+                        field: columnMap.latitude || 'Latitude'
+                    });
+                } else {
+                    const lat = parseFloat(row[columnMap.latitude]);
+                    if (isNaN(lat) || lat < -90 || lat > 90) {
+                        rowErrors.push({
+                            type: 'invalid_format',
+                            message: 'Invalid latitude (must be between -90 and 90)',
+                            field: columnMap.latitude,
+                            value: row[columnMap.latitude]
+                        });
+                    }
+                }
+
+                // Check for longitude
+                if (!columnMap.longitude || row[columnMap.longitude] === null || row[columnMap.longitude] === undefined || row[columnMap.longitude] === '') {
+                    rowErrors.push({
+                        type: 'missing_data',
+                        message: 'Missing longitude data',
+                        field: columnMap.longitude || 'Longitude'
+                    });
+                } else {
+                    const lon = parseFloat(row[columnMap.longitude]);
+                    if (isNaN(lon) || lon < -180 || lon > 180) {
+                        rowErrors.push({
+                            type: 'invalid_format',
+                            message: 'Invalid longitude (must be between -180 and 180)',
+                            field: columnMap.longitude,
+                            value: row[columnMap.longitude]
+                        });
+                    }
+                }
+            } else if (dataType === 'address') {
+                // For address data, validation happens during geocoding
+                // Just check that we have at least some address components
+                let hasAddressData = false;
+                const addressFields = ['street', 'city', 'zip', 'state'];
+
+                for (let field of addressFields) {
+                    if (columnMap[field] && row[columnMap[field]] && row[columnMap[field]].toString().trim() !== '') {
+                        hasAddressData = true;
+                        break;
+                    }
+                }
+
+                if (!hasAddressData) {
+                    rowErrors.push({
+                        type: 'missing_data',
+                        message: 'No address data found in row',
+                        field: 'Address'
+                    });
+                }
+            }
+
+            // Check for completely empty rows
+            const hasAnyData = Object.values(row).some(val =>
+                val !== null && val !== undefined && val !== ''
+            );
+
+            if (!hasAnyData) {
+                rowErrors.push({
+                    type: 'empty_row',
+                    message: 'Row is completely empty',
+                    field: 'All'
+                });
+            }
+
+            // Categorize row
+            if (rowErrors.length > 0) {
+                invalidRows.push({ rowNum, data: row, errors: rowErrors });
+                errors.push(...rowErrors.map(err => ({
+                    rowNum,
+                    ...err,
+                    data: row
+                })));
+            } else {
+                validRows.push(row);
+            }
+        });
+
+        return {
+            totalRows: data.length,
+            validRows: validRows,
+            invalidRows: invalidRows,
+            validCount: validRows.length,
+            invalidCount: invalidRows.length,
+            errors: errors,
+            dataType: dataType,
+            columnMap: columnMap
+        };
     }
 }

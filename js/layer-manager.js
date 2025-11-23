@@ -30,6 +30,7 @@ class LayerManager {
             type: type,
             features: features,
             visible: true,
+            opacity: 1.0,
             color: null,
             metadata: metadata,
             createdAt: new Date().toISOString()
@@ -153,13 +154,72 @@ class LayerManager {
             // Swap with previous
             [this.layerOrder[index - 1], this.layerOrder[index]] =
             [this.layerOrder[index], this.layerOrder[index - 1]];
+            this.syncLayerZOrder();
             this.notifyUpdate();
         } else if (direction === 'down' && index < this.layerOrder.length - 1) {
             // Swap with next
             [this.layerOrder[index], this.layerOrder[index + 1]] =
             [this.layerOrder[index + 1], this.layerOrder[index]];
+            this.syncLayerZOrder();
             this.notifyUpdate();
         }
+    }
+
+    /**
+     * Sync map layer z-order with layerOrder array
+     * Layers at the top of the list appear on top on the map
+     */
+    syncLayerZOrder() {
+        // Reverse the order because Azure Maps renders layers bottom-to-top
+        // (last added layer appears on top)
+        const reversedOrder = [...this.layerOrder].reverse();
+
+        reversedOrder.forEach(layerId => {
+            const mapLayers = this.mapManager.layers.get(layerId);
+            if (mapLayers) {
+                // Remove and re-add layers to move them to the top
+                if (mapLayers.polygon) {
+                    this.mapManager.map.layers.remove(mapLayers.polygon);
+                    this.mapManager.map.layers.add(mapLayers.polygon);
+                }
+                if (mapLayers.line) {
+                    this.mapManager.map.layers.remove(mapLayers.line);
+                    this.mapManager.map.layers.add(mapLayers.line);
+                }
+                if (mapLayers.symbol) {
+                    this.mapManager.map.layers.remove(mapLayers.symbol);
+                    this.mapManager.map.layers.add(mapLayers.symbol);
+                }
+            }
+        });
+    }
+
+    /**
+     * Set layer opacity
+     * @param {string} layerId - Layer ID
+     * @param {number} opacity - Opacity value (0-1)
+     */
+    setLayerOpacity(layerId, opacity) {
+        const layer = this.layers.get(layerId);
+        if (!layer) return;
+
+        layer.opacity = opacity;
+
+        // Update map layers
+        const mapLayers = this.mapManager.layers.get(layerId);
+        if (mapLayers) {
+            if (mapLayers.polygon) {
+                mapLayers.polygon.setOptions({ fillOpacity: opacity * 0.5 });
+            }
+            if (mapLayers.line) {
+                mapLayers.line.setOptions({ strokeOpacity: opacity });
+            }
+            if (mapLayers.symbol) {
+                mapLayers.symbol.setOptions({ iconOptions: { opacity: opacity } });
+            }
+        }
+
+        this.notifyUpdate();
     }
 
     /**
@@ -363,6 +423,7 @@ class LayerManager {
             type: layer.type,
             features: layer.features,
             visible: layer.visible,
+            opacity: layer.opacity !== undefined ? layer.opacity : 1.0,
             color: layer.color,
             metadata: layer.metadata,
             createdAt: layer.createdAt
@@ -422,6 +483,7 @@ class LayerManager {
                 type: layerData.type,
                 features: layerData.features || [],
                 visible: layerData.visible !== undefined ? layerData.visible : true,
+                opacity: layerData.opacity !== undefined ? layerData.opacity : 1.0,
                 color: layerData.color || null,
                 metadata: layerData.metadata || {},
                 createdAt: layerData.createdAt || new Date().toISOString(),
@@ -449,6 +511,11 @@ class LayerManager {
                 // Set visibility on map
                 if (!layer.visible) {
                     this.mapManager.toggleLayerVisibility(layerId, false);
+                }
+
+                // Set opacity on map
+                if (layer.opacity !== undefined && layer.opacity !== 1.0) {
+                    this.setLayerOpacity(layerId, layer.opacity);
                 }
             } else {
                 // Create empty data source
