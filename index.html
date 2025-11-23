@@ -179,16 +179,38 @@
         <div id="uploadModal" class="modal">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h2>Upload CSV Data</h2>
+                    <h2>Import Data</h2>
                     <span class="close" data-modal="uploadModal">&times;</span>
                 </div>
                 <div class="modal-body">
-                    <div class="upload-area">
-                        <input type="file" id="csvFileInput" accept=".csv" />
-                        <button id="uploadBtn" class="btn btn-primary">Upload CSV</button>
+                    <!-- Import Tabs -->
+                    <div class="import-tabs">
+                        <button class="import-tab active" data-tab="file">📁 Upload Files</button>
+                        <button class="import-tab" data-tab="paste">📋 Copy/Paste</button>
                     </div>
-                    <div class="upload-info">
-                        <small>Supported: WKT polygons, Lat/Long coordinates, or address columns (Street, City, Zip)</small>
+
+                    <!-- File Upload Tab -->
+                    <div id="fileTab" class="import-tab-content active">
+                        <div class="upload-area">
+                            <input type="file" id="csvFileInput" accept=".csv,.xlsx,.xls" multiple />
+                            <button id="uploadBtn" class="btn btn-primary">Upload Files</button>
+                        </div>
+                        <div class="upload-info">
+                            <small>Supported: CSV and Excel files (.csv, .xlsx, .xls). Select multiple files to create separate layers.</small>
+                            <small style="display: block; margin-top: 0.25rem;">Data: WKT polygons, Lat/Long coordinates, or address columns (Street, City, Zip)</small>
+                        </div>
+                    </div>
+
+                    <!-- Copy/Paste Tab -->
+                    <div id="pasteTab" class="import-tab-content">
+                        <div class="paste-area">
+                            <label for="pasteInput">Copy data from Excel or CSV and paste below:</label>
+                            <textarea id="pasteInput" placeholder="Paste your data here (tab-separated or comma-separated)..." rows="10"></textarea>
+                            <button id="importPasteBtn" class="btn btn-primary">Import Pasted Data</button>
+                        </div>
+                        <div class="upload-info">
+                            <small>Copy cells directly from Excel or Google Sheets and paste them here.</small>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -307,6 +329,34 @@
                 </div>
             </div>
         </div>
+
+        <!-- Validation Results Modal -->
+        <div id="validationModal" class="modal">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2>Data Validation Results</h2>
+                    <span class="close" data-modal="validationModal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div id="validationSummary" class="validation-summary">
+                        <!-- Summary will be inserted here -->
+                    </div>
+
+                    <div id="validationErrors" class="validation-errors" style="display: none;">
+                        <h3>Validation Errors</h3>
+                        <div id="errorList" class="error-list">
+                            <!-- Error details will be inserted here -->
+                        </div>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button id="importValidDataBtn" class="btn btn-primary" style="display: none;">Import Valid Rows</button>
+                        <button id="downloadErrorsBtn" class="btn btn-secondary" style="display: none;">Download Error Report</button>
+                        <button id="closeValidationBtn" class="btn btn-secondary">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Loading Overlay -->
@@ -328,6 +378,9 @@
 
     <!-- PapaParse for CSV parsing -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <!-- SheetJS for Excel parsing -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 
     <!-- Wellknown for WKT parsing -->
     <script src="https://unpkg.com/wellknown@0.5.0/wellknown.js"></script>

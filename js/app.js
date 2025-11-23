@@ -159,6 +159,22 @@ function setupEventListeners() {
         item.addEventListener('click', handleLayerAction);
     });
 
+    // Import Tabs
+    document.querySelectorAll('.import-tab').forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            const tabName = e.target.dataset.tab;
+            switchImportTab(tabName);
+        });
+    });
+
+    // Paste Import
+    document.getElementById('importPasteBtn').addEventListener('click', handlePasteImport);
+
+    // Validation Modal
+    document.getElementById('importValidDataBtn').addEventListener('click', handleImportValidData);
+    document.getElementById('downloadErrorsBtn').addEventListener('click', handleDownloadErrors);
+    document.getElementById('closeValidationBtn').addEventListener('click', () => closeModal('validationModal'));
+
     // Modal close buttons
     document.querySelectorAll('.close').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -454,38 +470,259 @@ function handleDeleteDrawing() {
  */
 async function handleCSVUpload() {
     const fileInput = document.getElementById('csvFileInput');
-    const file = fileInput.files[0];
+    const files = Array.from(fileInput.files);
 
-    if (!file) {
-        showToast('Please select a CSV file', 'warning');
+    if (files.length === 0) {
+        showToast('Please select at least one file', 'warning');
         return;
     }
 
     closeModal('uploadModal');
-    showLoading('Parsing CSV file...');
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    // Process each file
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileNum = files.length > 1 ? ` (${i + 1}/${files.length})` : '';
+
+        showLoading(`Parsing ${file.name}${fileNum}...`);
+
+        try {
+            const parsed = await csvParser.parseFile(file);
+            console.log(`File parsed: ${file.name}`, parsed);
+
+            if (parsed.needsGeocoding) {
+                // For multi-file uploads with geocoding needed, pause and ask user
+                if (files.length > 1) {
+                    hideLoading();
+                    const proceed = confirm(`File "${file.name}" contains addresses and needs geocoding. Skip this file and continue with remaining files?`);
+                    if (!proceed) {
+                        // Process this file for geocoding
+                        currentCSVData = parsed;
+                        currentCSVData.fileName = file.name;
+                        const detectedMapping = geocodingService.detectAddressColumns(parsed.originalColumns);
+                        showColumnMapModal(parsed.originalColumns, detectedMapping);
+                        fileInput.value = '';
+                        document.getElementById('uploadBtn').disabled = true;
+                        return;
+                    }
+                    continue; // Skip this file
+                } else {
+                    // Single file needing geocoding
+                    hideLoading();
+                    currentCSVData = parsed;
+                    currentCSVData.fileName = file.name;
+                    const detectedMapping = geocodingService.detectAddressColumns(parsed.originalColumns);
+                    showColumnMapModal(parsed.originalColumns, detectedMapping);
+                    fileInput.value = '';
+                    document.getElementById('uploadBtn').disabled = true;
+                    return;
+                }
+            }
+
+            // Validate data before creating layer
+            showLoading(`Validating ${file.name}${fileNum}...`);
+
+            // Get raw data from the parsed result
+            const rawData = parsed.rawData || parsed.features;
+            const validation = csvParser.validateData(rawData, parsed.columnMap, parsed.type);
+
+            console.log(`Validation results for ${file.name}:`, validation);
+
+            // If there are validation errors, show validation modal for single file
+            // For multi-file, we'll just skip invalid rows automatically
+            if (validation.invalidCount > 0) {
+                if (files.length === 1) {
+                    // Single file - show validation modal and let user decide
+                    hideLoading();
+                    showValidationResults(validation, file.name);
+                    fileInput.value = '';
+                    document.getElementById('uploadBtn').disabled = true;
+                    return;
+                } else {
+                    // Multi-file - use only valid rows and continue
+                    console.log(`Skipping ${validation.invalidCount} invalid rows from ${file.name}`);
+                    if (validation.validCount === 0) {
+                        errorCount++;
+                        showToast(`${file.name}: All rows invalid, skipping file`, 'warning');
+                        continue;
+                    }
+                    // Extract features from valid rows only
+                    parsed.features = csvParser.extractFeatures(
+                        validation.validRows,
+                        validation.columnMap,
+                        validation.dataType
+                    );
+                }
+            }
+
+            // Auto-generate layer name from file name
+            const defaultName = file.name.replace(/\.(csv|xlsx|xls)$/i, '');
+            const layerName = files.length === 1
+                ? (prompt('Enter layer name:', defaultName) || defaultName)
+                : defaultName; // Auto-name for multi-file uploads
+
+            if (!layerName && files.length === 1) {
+                hideLoading();
+                fileInput.value = '';
+                document.getElementById('uploadBtn').disabled = true;
+                return;
+            }
+
+            const layerId = layerManager.createLayer(layerName, parsed.features, parsed.type, {
+                sourceFile: file.name,
+                columnMap: parsed.columnMap,
+                importDate: new Date().toISOString()
+            });
+
+            // Always add to "All Layers" group
+            addLayerToGroup(layerId, allLayersGroupId);
+
+            // Also add to active group if one is selected (and it's not "All Layers")
+            if (activeGroup && activeGroup !== allLayersGroupId) {
+                addLayerToGroup(layerId, activeGroup);
+            }
+
+            successCount++;
+            console.log(`Layer "${layerName}" created from ${file.name}`);
+        } catch (error) {
+            console.error(`Error parsing ${file.name}:`, error);
+            errorCount++;
+
+            if (files.length === 1) {
+                // For single file, show detailed error
+                hideLoading();
+                const errorMsg = error.message || 'Unknown error occurred';
+                showToast(`Error parsing ${file.name}: ${errorMsg}`, 'error', 8000);
+
+                if (errorMsg.includes('\n')) {
+                    setTimeout(() => {
+                        alert(`File Parsing Error:\n\n${errorMsg}`);
+                    }, 500);
+                }
+            }
+            // For multi-file, continue with next file
+        }
+    }
+
+    hideLoading();
+
+    // Show summary for multi-file uploads
+    if (files.length > 1) {
+        if (successCount > 0 && errorCount > 0) {
+            showToast(`Imported ${successCount} file(s). ${errorCount} file(s) failed.`, 'warning');
+        } else if (successCount > 0) {
+            showToast(`Successfully imported ${successCount} file(s)`, 'success');
+        } else {
+            showToast(`Failed to import all files`, 'error');
+        }
+    } else if (successCount > 0) {
+        showToast(`Layer created successfully`, 'success');
+    }
+
+    fileInput.value = '';
+    document.getElementById('uploadBtn').disabled = true;
+    updateColumnSelects();
+}
+
+/**
+ * Switch import tab
+ */
+function switchImportTab(tabName) {
+    // Update tab buttons
+    document.querySelectorAll('.import-tab').forEach(tab => {
+        if (tab.dataset.tab === tabName) {
+            tab.classList.add('active');
+        } else {
+            tab.classList.remove('active');
+        }
+    });
+
+    // Update tab content
+    document.querySelectorAll('.import-tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+
+    if (tabName === 'file') {
+        document.getElementById('fileTab').classList.add('active');
+    } else if (tabName === 'paste') {
+        document.getElementById('pasteTab').classList.add('active');
+    }
+}
+
+/**
+ * Handle paste import
+ */
+async function handlePasteImport() {
+    const pasteInput = document.getElementById('pasteInput');
+    const pastedData = pasteInput.value.trim();
+
+    if (!pastedData) {
+        showToast('Please paste some data first', 'warning');
+        return;
+    }
+
+    closeModal('uploadModal');
+    showLoading('Parsing pasted data...');
 
     try {
-        const parsed = await csvParser.parseFile(file);
-        console.log('CSV parsed:', parsed);
-        console.log('Columns found:', parsed.originalColumns);
+        // Parse pasted data using PapaParse
+        const parsed = await new Promise((resolve, reject) => {
+            Papa.parse(pastedData, {
+                header: true,
+                skipEmptyLines: true,
+                dynamicTyping: true,
+                delimiter: '', // Auto-detect delimiter (tab or comma)
+                complete: (results) => {
+                    try {
+                        const processedData = csvParser.processData(results.data, results.meta.fields);
+                        resolve(processedData);
+                    } catch (error) {
+                        reject(error);
+                    }
+                },
+                error: (error) => {
+                    reject(error);
+                }
+            });
+        });
+
+        console.log('Pasted data parsed:', parsed);
 
         if (parsed.needsGeocoding) {
             hideLoading();
             currentCSVData = parsed;
+            currentCSVData.fileName = 'Pasted Data';
             const detectedMapping = geocodingService.detectAddressColumns(parsed.originalColumns);
-            console.log('Detected address mapping:', detectedMapping);
             showColumnMapModal(parsed.originalColumns, detectedMapping);
             return;
         }
 
-        const layerName = prompt('Enter layer name:', file.name.replace('.csv', ''));
+        // Validate data before creating layer
+        showLoading('Validating pasted data...');
+
+        const rawData = parsed.rawData || parsed.features;
+        const validation = csvParser.validateData(rawData, parsed.columnMap, parsed.type);
+
+        console.log('Validation results for pasted data:', validation);
+
+        // If there are validation errors, show validation modal
+        if (validation.invalidCount > 0) {
+            hideLoading();
+            showValidationResults(validation, 'Pasted Data');
+            return;
+        }
+
+        const layerName = prompt('Enter layer name:', 'Pasted Data');
         if (!layerName) {
             hideLoading();
             return;
         }
 
         const layerId = layerManager.createLayer(layerName, parsed.features, parsed.type, {
-            sourceFile: file.name,
+            sourceFile: 'Pasted from clipboard',
             columnMap: parsed.columnMap,
             importDate: new Date().toISOString()
         });
@@ -501,24 +738,207 @@ async function handleCSVUpload() {
         hideLoading();
         showToast(`Layer "${layerName}" created with ${parsed.features.length} features`, 'success');
 
-        fileInput.value = '';
-        document.getElementById('uploadBtn').disabled = true;
-
+        // Clear the textarea
+        pasteInput.value = '';
         updateColumnSelects();
     } catch (error) {
-        console.error('Error uploading CSV:', error);
+        console.error('Error parsing pasted data:', error);
         hideLoading();
+        showToast('Error parsing pasted data: ' + error.message, 'error');
+    }
+}
 
-        // Show detailed error message
-        const errorMsg = error.message || 'Unknown error occurred';
-        showToast('Error parsing CSV: ' + errorMsg, 'error', 8000);
+/**
+ * Validate and show validation results
+ * @param {Array} data - Raw data rows
+ * @param {Object} columnMap - Column mappings
+ * @param {string} dataType - Data type
+ * @param {string} fileName - File name for reference
+ * @returns {Object} Validation results
+ */
+function validateAndShowResults(data, columnMap, dataType, fileName) {
+    // Run validation
+    const validation = csvParser.validateData(data, columnMap, dataType);
 
-        // Also show an alert with the full error for complex messages
-        if (errorMsg.includes('\n')) {
-            setTimeout(() => {
-                alert('CSV Parsing Error:\n\n' + errorMsg);
-            }, 500);
+    // If there are errors, show validation modal
+    if (validation.invalidCount > 0) {
+        showValidationResults(validation, fileName);
+        return validation;
+    }
+
+    // If all valid, return validation results
+    return validation;
+}
+
+/**
+ * Show validation results in modal
+ */
+function showValidationResults(validation, fileName) {
+    // Update summary
+    const summaryHtml = `
+        <p><strong>File:</strong> ${fileName || 'Imported Data'}</p>
+        <p>Data validation completed. Review the results below:</p>
+        <div class="validation-stats">
+            <div class="validation-stat">
+                <span class="validation-stat-value">${validation.totalRows}</span>
+                <span class="validation-stat-label">Total Rows</span>
+            </div>
+            <div class="validation-stat">
+                <span class="validation-stat-value success">${validation.validCount}</span>
+                <span class="validation-stat-label">Valid</span>
+            </div>
+            <div class="validation-stat">
+                <span class="validation-stat-value error">${validation.invalidCount}</span>
+                <span class="validation-stat-label">Errors</span>
+            </div>
+        </div>
+    `;
+    document.getElementById('validationSummary').innerHTML = summaryHtml;
+
+    // Show errors if any
+    const errorsSection = document.getElementById('validationErrors');
+    const errorList = document.getElementById('errorList');
+
+    if (validation.errors.length > 0) {
+        errorsSection.style.display = 'block';
+
+        // Group errors by row
+        const errorsByRow = new Map();
+        validation.invalidRows.forEach(invalidRow => {
+            errorsByRow.set(invalidRow.rowNum, invalidRow);
+        });
+
+        // Build error list HTML
+        let errorsHtml = '';
+        errorsByRow.forEach((invalidRow, rowNum) => {
+            errorsHtml += `
+                <div class="error-item">
+                    <div class="error-item-header">
+                        <span class="error-item-row">Row ${rowNum}</span>
+                        <span class="error-item-type">${invalidRow.errors[0].type.replace('_', ' ')}</span>
+                    </div>
+                    ${invalidRow.errors.map(err => `
+                        <div class="error-item-message">
+                            <strong>${err.field}:</strong> ${err.message}
+                            ${err.value ? `<div class="error-item-details">Value: "${err.value}"</div>` : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        });
+
+        errorList.innerHTML = errorsHtml;
+    } else {
+        errorsSection.style.display = 'none';
+    }
+
+    // Show/hide action buttons
+    const importValidBtn = document.getElementById('importValidDataBtn');
+    const downloadErrorsBtn = document.getElementById('downloadErrorsBtn');
+
+    if (validation.validCount > 0 && validation.invalidCount > 0) {
+        importValidBtn.style.display = 'inline-block';
+        importValidBtn.onclick = () => handleImportValidData(validation);
+    } else {
+        importValidBtn.style.display = 'none';
+    }
+
+    if (validation.invalidCount > 0) {
+        downloadErrorsBtn.style.display = 'inline-block';
+        downloadErrorsBtn.onclick = () => handleDownloadErrors(validation);
+    } else {
+        downloadErrorsBtn.style.display = 'none';
+    }
+
+    // Show modal
+    showModal('validationModal');
+}
+
+/**
+ * Import only valid data from validation results
+ */
+function handleImportValidData(validation) {
+    if (!validation || validation.validCount === 0) {
+        showToast('No valid data to import', 'warning');
+        return;
+    }
+
+    closeModal('validationModal');
+    showLoading('Processing valid data...');
+
+    try {
+        // Process only valid rows
+        const features = csvParser.extractFeatures(
+            validation.validRows,
+            validation.columnMap,
+            validation.dataType
+        );
+
+        // Create layer with valid data
+        const layerName = prompt('Enter layer name:', 'Imported Data (validated)');
+        if (layerName) {
+            const layerId = layerManager.createLayer(layerName, features, validation.dataType, {
+                sourceFile: 'Validated Import',
+                columnMap: validation.columnMap,
+                importDate: new Date().toISOString(),
+                validatedRows: validation.validCount,
+                skippedRows: validation.invalidCount
+            });
+
+            addLayerToGroup(layerId, allLayersGroupId);
+
+            showToast(
+                `Layer "${layerName}" created with ${features.length} valid features. ${validation.invalidCount} rows skipped.`,
+                'success'
+            );
         }
+    } catch (error) {
+        console.error('Error importing valid data:', error);
+        showToast('Error importing valid data: ' + error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+/**
+ * Download validation errors as CSV
+ */
+function handleDownloadErrors(validation) {
+    if (!validation || validation.errors.length === 0) {
+        showToast('No errors to download', 'warning');
+        return;
+    }
+
+    try {
+        // Build error report CSV
+        const errorReport = validation.errors.map(err => ({
+            'Row Number': err.rowNum,
+            'Error Type': err.type,
+            'Field': err.field,
+            'Message': err.message,
+            'Invalid Value': err.value || ''
+        }));
+
+        // Convert to CSV
+        const csv = Papa.unparse(errorReport);
+
+        // Download
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+
+        link.setAttribute('href', url);
+        link.setAttribute('download', `validation_errors_${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = 'hidden';
+
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        showToast('Error report downloaded', 'success');
+    } catch (error) {
+        console.error('Error downloading error report:', error);
+        showToast('Error downloading report: ' + error.message, 'error');
     }
 }
 
