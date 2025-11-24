@@ -217,6 +217,9 @@ class LayerManager {
             if (mapLayers.symbol) {
                 mapLayers.symbol.setOptions({ iconOptions: { opacity: opacity } });
             }
+            if (mapLayers.bubble) {
+                mapLayers.bubble.setOptions({ opacity: opacity });
+            }
         }
 
         this.notifyUpdate();

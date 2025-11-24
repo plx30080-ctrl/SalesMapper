@@ -281,7 +281,7 @@ body {
 .layer-name {
     font-weight: 500;
     flex: 1;
-    font-size: 0.9rem;
+    font-size: 1rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -326,9 +326,7 @@ body {
 }
 
 .layer-opacity-control {
-    display: flex;
-    align-items: center;
-    margin: 0 0.5rem;
+    display: none;  /* Opacity moved to settings menu */
 }
 
 .opacity-slider {
@@ -368,6 +366,47 @@ body {
 }
 
 .opacity-slider::-moz-range-thumb:hover {
+    transform: scale(1.2);
+}
+
+/* Opacity slider in style modal */
+.opacity-slider-wide {
+    width: 100%;
+    height: 6px;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    background: linear-gradient(to right, transparent, var(--primary-color));
+    border-radius: 3px;
+    outline: none;
+}
+
+.opacity-slider-wide::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.opacity-slider-wide::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+.opacity-slider-wide::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+}
+
+.opacity-slider-wide::-moz-range-thumb:hover {
     transform: scale(1.2);
 }
 

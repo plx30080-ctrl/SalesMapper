@@ -499,6 +499,9 @@ class MapManager {
         if (layer.symbol) {
             layer.symbol.setOptions({ visible: visible });
         }
+        if (layer.bubble) {
+            layer.bubble.setOptions({ visible: visible });
+        }
     }
 
     /**
@@ -514,6 +517,7 @@ class MapManager {
             if (layer.polygon) this.map.layers.remove(layer.polygon);
             if (layer.line) this.map.layers.remove(layer.line);
             if (layer.symbol) this.map.layers.remove(layer.symbol);
+            if (layer.bubble) this.map.layers.remove(layer.bubble);
             this.layers.delete(layerId);
         }
 
