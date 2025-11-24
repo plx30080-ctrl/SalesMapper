@@ -568,6 +568,9 @@ class MapManager {
         if (layer.bubble) {
             layer.bubble.setOptions({ visible: visible });
         }
+        if (layer.individualBubble) {
+            layer.individualBubble.setOptions({ visible: visible });
+        }
         if (layer.clusterLabel) {
             layer.clusterLabel.setOptions({ visible: visible });
         }
@@ -587,6 +590,7 @@ class MapManager {
             if (layer.line) this.map.layers.remove(layer.line);
             if (layer.symbol) this.map.layers.remove(layer.symbol);
             if (layer.bubble) this.map.layers.remove(layer.bubble);
+            if (layer.individualBubble) this.map.layers.remove(layer.individualBubble);
             if (layer.clusterLabel) this.map.layers.remove(layer.clusterLabel);
             this.layers.delete(layerId);
         }
