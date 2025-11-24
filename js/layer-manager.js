@@ -530,6 +530,9 @@ class LayerManager {
         // Restore layer order
         this.layerOrder = layerOrder.filter(id => this.layers.has(id));
 
+        // Sync the layer z-order on the map to match the restored order
+        this.syncLayerZOrder();
+
         // Notify update
         this.notifyUpdate();
     }
