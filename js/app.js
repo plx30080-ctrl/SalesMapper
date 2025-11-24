@@ -20,6 +20,75 @@ let allLayersGroupId = null; // Special group that shows all layers
 let currentLayerForActions = null;
 
 /**
+ * Save current state to localStorage
+ */
+function saveToLocalStorage() {
+    try {
+        const layersData = layerManager.exportAllLayers();
+        const groupsData = Array.from(layerGroups.values());
+        const state = {
+            layers: layersData,
+            groups: groupsData,
+            allLayersGroupId: allLayersGroupId,
+            activeGroup: activeGroup,
+            timestamp: new Date().toISOString()
+        };
+        localStorage.setItem('salesMapperState', JSON.stringify(state));
+        console.log('State auto-saved to localStorage');
+    } catch (error) {
+        console.error('Error saving to localStorage:', error);
+    }
+}
+
+/**
+ * Load state from localStorage
+ * @returns {boolean} True if data was loaded, false otherwise
+ */
+function loadFromLocalStorage() {
+    try {
+        const saved = localStorage.getItem('salesMapperState');
+        if (!saved) {
+            console.log('No saved state found in localStorage');
+            return false;
+        }
+
+        const state = JSON.parse(saved);
+        console.log('Loading saved state from localStorage...', state);
+
+        // Restore groups
+        if (state.groups && state.groups.length > 0) {
+            layerGroups.clear();
+            state.groups.forEach(g => {
+                layerGroups.set(g.id, g);
+            });
+            allLayersGroupId = state.allLayersGroupId;
+            activeGroup = state.activeGroup;
+            updateLayerGroupList();
+        }
+
+        // Restore layers
+        if (state.layers && Object.keys(state.layers).length > 0) {
+            layerManager.importLayers(state.layers);
+
+            // Re-apply property-based styling for layers that have it
+            layerManager.getAllLayers().forEach(layer => {
+                if (layer.styleType && layer.styleProperty) {
+                    applyPropertyBasedStyle(layer.id, layer.styleProperty, layer.styleType);
+                }
+            });
+
+            console.log('State loaded successfully from localStorage');
+            return true;
+        }
+
+        return false;
+    } catch (error) {
+        console.error('Error loading from localStorage:', error);
+        return false;
+    }
+}
+
+/**
  * Initialize the application
  */
 async function initializeApp() {
@@ -52,8 +121,13 @@ async function initializeApp() {
         // Setup real-time Firebase listener
         enableRealtimeSync();
 
-        // Initialize with default "All Layers" group
-        allLayersGroupId = createLayerGroup('All Layers');
+        // Try to load saved state from localStorage
+        const loaded = loadFromLocalStorage();
+
+        // Initialize with default "All Layers" group if no data was loaded
+        if (!loaded) {
+            allLayersGroupId = createLayerGroup('All Layers');
+        }
 
         console.log('Application initialized successfully');
         hideLoading();
@@ -310,6 +384,9 @@ function updateLayerGroupList() {
 
         groupList.appendChild(groupItem);
     });
+
+    // Auto-save state after group updates
+    saveToLocalStorage();
 }
 
 /**
@@ -1285,6 +1362,9 @@ function updateLayerList(layers) {
     });
 
     updateLegend(layers.filter(l => l.visible));
+
+    // Auto-save state after layer updates
+    saveToLocalStorage();
 }
 
 /**
@@ -1706,6 +1786,9 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
         });
 
         const symbolLayer = new atlas.layer.SymbolLayer(dataSource, `${layerId}-symbols`, {
+            iconOptions: {
+                size: 0  // Hide marker icons when using BubbleLayer
+            },
             textOptions: {
                 // Use coalesce to handle null names
                 textField: ['coalesce', ['get', 'name'], ''],
