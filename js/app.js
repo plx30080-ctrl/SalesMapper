@@ -160,6 +160,12 @@ function setupEventListeners() {
     document.getElementById('applyStyleBtn').addEventListener('click', handleApplyStyle);
     document.getElementById('cancelStyleBtn').addEventListener('click', () => closeModal('styleModal'));
 
+    // Opacity slider in style modal
+    const opacitySlider = document.getElementById('layerOpacitySlider');
+    opacitySlider.addEventListener('input', (e) => {
+        document.getElementById('opacityValue').textContent = e.target.value;
+    });
+
     // Layer Actions Menu
     document.querySelectorAll('.context-menu-item').forEach(item => {
         item.addEventListener('click', handleLayerAction);
@@ -1438,6 +1444,12 @@ function showStyleModal(layerId) {
         select.appendChild(option);
     });
 
+    // Set current layer opacity
+    const currentOpacity = layer.opacity !== undefined ? layer.opacity : 1.0;
+    const opacityPercent = Math.round(currentOpacity * 100);
+    document.getElementById('layerOpacitySlider').value = opacityPercent;
+    document.getElementById('opacityValue').textContent = opacityPercent;
+
     showModal('styleModal');
 }
 
@@ -1491,6 +1503,10 @@ function handleApplyStyle() {
             break;
     }
 
+    // Get opacity value
+    const opacityPercent = parseInt(document.getElementById('layerOpacitySlider').value);
+    const opacity = opacityPercent / 100;
+
     closeModal('styleModal');
     showLoading('Applying style...');
 
@@ -1501,6 +1517,9 @@ function handleApplyStyle() {
         } else {
             applyPropertyBasedStyle(layerId, property, styleType);
         }
+
+        // Apply opacity to the layer
+        layerManager.setLayerOpacity(layerId, opacity);
 
         hideLoading();
         showToast('Style applied successfully', 'success');
@@ -1672,22 +1691,21 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
 
         // Setup click events using the layer objects, not IDs
         mapManager.map.events.add('click', polygonLayer, (e) => {
-            if (mapManager.onFeatureClick) {
-                mapManager.onFeatureClick(e, layerId);
-            }
+            mapManager.handleFeatureClick(e, layerId);
         });
         mapManager.map.events.add('click', lineLayer, (e) => {
-            if (mapManager.onFeatureClick) {
-                mapManager.onFeatureClick(e, layerId);
-            }
+            mapManager.handleFeatureClick(e, layerId);
         });
     } else {
+        // Use BubbleLayer for colored markers with data-driven styling
+        const bubbleLayer = new atlas.layer.BubbleLayer(dataSource, `${layerId}-bubbles`, {
+            color: matchExpression,
+            radius: 8,
+            strokeColor: '#ffffff',
+            strokeWidth: 2
+        });
+
         const symbolLayer = new atlas.layer.SymbolLayer(dataSource, `${layerId}-symbols`, {
-            iconOptions: {
-                image: 'marker-blue',
-                anchor: 'center',
-                allowOverlap: true
-            },
             textOptions: {
                 // Use coalesce to handle null names
                 textField: ['coalesce', ['get', 'name'], ''],
@@ -1698,17 +1716,19 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
             }
         });
 
-        mapManager.map.layers.add(symbolLayer);
+        mapManager.map.layers.add([bubbleLayer, symbolLayer]);
         mapManager.layers.set(layerId, {
+            bubble: bubbleLayer,
             symbol: symbolLayer,
             color: 'data-driven'
         });
 
-        // Setup click event using the layer object, not ID
+        // Setup click events using the layer objects, not IDs
+        mapManager.map.events.add('click', bubbleLayer, (e) => {
+            mapManager.handleFeatureClick(e, layerId);
+        });
         mapManager.map.events.add('click', symbolLayer, (e) => {
-            if (mapManager.onFeatureClick) {
-                mapManager.onFeatureClick(e, layerId);
-            }
+            mapManager.handleFeatureClick(e, layerId);
         });
     }
 
