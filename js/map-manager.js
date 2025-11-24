@@ -286,8 +286,12 @@ class MapManager {
      * @param {string} layerId - Layer ID
      * @returns {atlas.source.DataSource}
      */
-    createDataSource(layerId) {
-        const dataSource = new atlas.source.DataSource();
+    createDataSource(layerId, enableClustering = false) {
+        const dataSource = new atlas.source.DataSource(null, {
+            cluster: enableClustering,
+            clusterRadius: 50,
+            clusterMaxZoom: 15
+        });
         this.map.sources.add(dataSource);
         this.dataSources.set(layerId, dataSource);
         return dataSource;
@@ -349,7 +353,37 @@ class MapManager {
             return;
         }
 
-        // Create symbol layer for points
+        // Create bubble layer for clustered points
+        const clusterBubbleLayer = new atlas.layer.BubbleLayer(dataSource, `${layerId}-clusters`, {
+            radius: [
+                'step',
+                ['get', 'point_count'],
+                20,    // Default size
+                10, 25,    // 10+ points
+                50, 30,    // 50+ points
+                100, 35,   // 100+ points
+                500, 40    // 500+ points
+            ],
+            color: color,
+            strokeWidth: 0,
+            filter: ['has', 'point_count'] // Only show clustered points
+        });
+
+        // Create symbol layer for cluster count
+        const clusterLabelLayer = new atlas.layer.SymbolLayer(dataSource, `${layerId}-cluster-labels`, {
+            iconOptions: {
+                image: 'none'
+            },
+            textOptions: {
+                textField: ['get', 'point_count_abbreviated'],
+                offset: [0, 0],
+                color: '#ffffff',
+                size: 14
+            },
+            filter: ['has', 'point_count'] // Only show on clustered points
+        });
+
+        // Create symbol layer for unclustered points
         const symbolLayer = new atlas.layer.SymbolLayer(dataSource, `${layerId}-symbols`, {
             iconOptions: {
                 image: 'marker-blue',
@@ -364,21 +398,51 @@ class MapManager {
                 haloColor: '#ffffff',
                 haloWidth: 2
             },
+            filter: ['!', ['has', 'point_count']], // Only show unclustered points
             ...options
         });
 
-        // Add layer to map
+        // Add layers to map in correct order (clusters first, then labels, then individual markers)
+        this.map.layers.add(clusterBubbleLayer);
+        this.map.layers.add(clusterLabelLayer);
         this.map.layers.add(symbolLayer);
 
-        // Store layer reference
+        // Store layer references
         this.layers.set(layerId, {
+            bubble: clusterBubbleLayer,
+            clusterLabel: clusterLabelLayer,
             symbol: symbolLayer,
             color: color
         });
 
-        // Add click event
+        // Add click event for unclustered points
         this.map.events.add('click', symbolLayer, (e) => {
             this.handleFeatureClick(e, layerId);
+        });
+
+        // Add click event for clusters (zoom in)
+        this.map.events.add('click', clusterBubbleLayer, (e) => {
+            if (e.shapes && e.shapes.length > 0) {
+                const properties = e.shapes[0].getProperties();
+                if (properties.cluster) {
+                    // Get cluster expansion zoom
+                    dataSource.getClusterExpansionZoom(properties.cluster_id).then((zoom) => {
+                        // Zoom to the cluster
+                        this.map.setCamera({
+                            center: e.shapes[0].getCoordinates(),
+                            zoom: zoom
+                        });
+                    });
+                }
+            }
+        });
+
+        // Change cursor on hover
+        this.map.events.add('mouseenter', clusterBubbleLayer, () => {
+            this.map.getCanvasContainer().style.cursor = 'pointer';
+        });
+        this.map.events.add('mouseleave', clusterBubbleLayer, () => {
+            this.map.getCanvasContainer().style.cursor = 'grab';
         });
     }
 
@@ -393,7 +457,9 @@ class MapManager {
 
         // Create data source if it doesn't exist
         if (!dataSource) {
-            dataSource = this.createDataSource(layerId);
+            // Enable clustering for point layers
+            const enableClustering = (type === 'point');
+            dataSource = this.createDataSource(layerId, enableClustering);
         }
 
         // Get next color
@@ -502,6 +568,9 @@ class MapManager {
         if (layer.bubble) {
             layer.bubble.setOptions({ visible: visible });
         }
+        if (layer.clusterLabel) {
+            layer.clusterLabel.setOptions({ visible: visible });
+        }
     }
 
     /**
@@ -518,6 +587,7 @@ class MapManager {
             if (layer.line) this.map.layers.remove(layer.line);
             if (layer.symbol) this.map.layers.remove(layer.symbol);
             if (layer.bubble) this.map.layers.remove(layer.bubble);
+            if (layer.clusterLabel) this.map.layers.remove(layer.clusterLabel);
             this.layers.delete(layerId);
         }
 
