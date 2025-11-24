@@ -410,7 +410,16 @@ function toggleGroupVisibility(groupId, visible) {
     const group = layerGroups.get(groupId);
     if (!group) return;
 
-    (group.layerIds || []).forEach(layerId => {
+    // Get layer IDs based on group type
+    let layerIds;
+    if (groupId === allLayersGroupId) {
+        // For "All Layers", apply to all layers
+        layerIds = layerManager.getAllLayers().map(l => l.id);
+    } else {
+        layerIds = group.layerIds || [];
+    }
+
+    layerIds.forEach(layerId => {
         const layer = layerManager.getLayer(layerId);
         if (layer) {
             if (visible) {
