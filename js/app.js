@@ -72,7 +72,19 @@ function loadFromLocalStorage() {
 
             // Ensure "All Layers" group exists
             if (!allLayersGroupId || !layerGroups.has(allLayersGroupId)) {
-                allLayersGroupId = createLayerGroup('All Layers');
+                // Try to find existing "All Layers" group by name
+                let foundAllLayersGroup = false;
+                layerGroups.forEach((group, id) => {
+                    if (group.name === 'All Layers') {
+                        allLayersGroupId = id;
+                        foundAllLayersGroup = true;
+                    }
+                });
+
+                // Only create a new one if none exists
+                if (!foundAllLayersGroup) {
+                    allLayersGroupId = createLayerGroup('All Layers');
+                }
             }
 
             // Ensure all layers are in the "All Layers" group
@@ -1724,7 +1736,10 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
 
     // Remove existing layer
     mapManager.removeLayer(layerId);
-    const dataSource = mapManager.createDataSource(layerId);
+
+    // Enable clustering for point layers
+    const enableClustering = layer.type === 'point';
+    const dataSource = mapManager.createDataSource(layerId, enableClustering);
 
     // Add all features to data source
     const geoJsonFeatures = layer.features.map((feature, index) => {
@@ -1799,17 +1814,53 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
             mapManager.handleFeatureClick(e, layerId);
         });
     } else {
-        // Use BubbleLayer for colored markers with data-driven styling
+        // Point layer with clustering and data-driven styling
+        // First, get the default color for clusters (use first color in the color map)
+        const defaultClusterColor = Object.values(colorMap)[0] || '#0078d4';
+
+        // Create bubble layer for clustered points (size based on count)
+        const clusterBubbleLayer = new atlas.layer.BubbleLayer(dataSource, `${layerId}-clusters`, {
+            radius: [
+                'step',
+                ['get', 'point_count'],
+                20,    // Default size
+                10, 25,    // 10+ points
+                50, 30,    // 50+ points
+                100, 35,   // 100+ points
+                500, 40    // 500+ points
+            ],
+            color: defaultClusterColor,
+            strokeWidth: 0,
+            filter: ['has', 'point_count'] // Only show clustered points
+        });
+
+        // Create symbol layer for cluster count
+        const clusterLabelLayer = new atlas.layer.SymbolLayer(dataSource, `${layerId}-cluster-labels`, {
+            iconOptions: {
+                image: 'none'
+            },
+            textOptions: {
+                textField: ['get', 'point_count_abbreviated'],
+                offset: [0, 0],
+                color: '#ffffff',
+                size: 14
+            },
+            filter: ['has', 'point_count'] // Only show on clustered points
+        });
+
+        // Create bubble layer for unclustered points with data-driven styling
         const bubbleLayer = new atlas.layer.BubbleLayer(dataSource, `${layerId}-bubbles`, {
             color: matchExpression,
             radius: 8,
             strokeColor: '#ffffff',
-            strokeWidth: 2
+            strokeWidth: 2,
+            filter: ['!', ['has', 'point_count']] // Only show unclustered points
         });
 
+        // Create symbol layer for unclustered point labels
         const symbolLayer = new atlas.layer.SymbolLayer(dataSource, `${layerId}-symbols`, {
             iconOptions: {
-                size: 0  // Hide marker icons when using BubbleLayer
+                image: 'none'
             },
             textOptions: {
                 // Use coalesce to handle null names
@@ -1818,22 +1869,58 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
                 color: '#333333',
                 haloColor: '#ffffff',
                 haloWidth: 2
-            }
+            },
+            filter: ['!', ['has', 'point_count']] // Only show on unclustered points
         });
 
-        mapManager.map.layers.add([bubbleLayer, symbolLayer]);
+        // Add layers to map in correct order
+        mapManager.map.layers.add([clusterBubbleLayer, clusterLabelLayer, bubbleLayer, symbolLayer]);
+
+        // Store layer references
         mapManager.layers.set(layerId, {
-            bubble: bubbleLayer,
+            bubble: clusterBubbleLayer,  // Main bubble layer is the cluster layer
+            clusterLabel: clusterLabelLayer,
+            individualBubble: bubbleLayer,  // Individual point bubbles
             symbol: symbolLayer,
             color: 'data-driven'
         });
 
-        // Setup click events using the layer objects, not IDs
+        // Setup click event for unclustered points (individual bubbles)
         mapManager.map.events.add('click', bubbleLayer, (e) => {
             mapManager.handleFeatureClick(e, layerId);
         });
-        mapManager.map.events.add('click', symbolLayer, (e) => {
-            mapManager.handleFeatureClick(e, layerId);
+
+        // Setup click event for clusters (zoom in)
+        mapManager.map.events.add('click', clusterBubbleLayer, (e) => {
+            if (e.shapes && e.shapes.length > 0) {
+                const properties = e.shapes[0].getProperties();
+                if (properties.cluster) {
+                    // Get cluster expansion zoom
+                    dataSource.getClusterExpansionZoom(properties.cluster_id).then((zoom) => {
+                        // Zoom to the cluster
+                        mapManager.map.setCamera({
+                            center: e.shapes[0].getCoordinates(),
+                            zoom: zoom
+                        });
+                    });
+                }
+            }
+        });
+
+        // Change cursor on hover for clusters
+        mapManager.map.events.add('mouseenter', clusterBubbleLayer, () => {
+            mapManager.map.getCanvasContainer().style.cursor = 'pointer';
+        });
+        mapManager.map.events.add('mouseleave', clusterBubbleLayer, () => {
+            mapManager.map.getCanvasContainer().style.cursor = 'grab';
+        });
+
+        // Change cursor on hover for individual points
+        mapManager.map.events.add('mouseenter', bubbleLayer, () => {
+            mapManager.map.getCanvasContainer().style.cursor = 'pointer';
+        });
+        mapManager.map.events.add('mouseleave', bubbleLayer, () => {
+            mapManager.map.getCanvasContainer().style.cursor = 'grab';
         });
     }
 
@@ -2304,7 +2391,19 @@ async function handleLoadFromFirebase() {
 
             // Ensure "All Layers" group exists
             if (!allLayersGroupId || !layerGroups.has(allLayersGroupId)) {
-                allLayersGroupId = createLayerGroup('All Layers');
+                // Try to find existing "All Layers" group by name
+                let foundAllLayersGroup = false;
+                layerGroups.forEach((group, id) => {
+                    if (group.name === 'All Layers') {
+                        allLayersGroupId = id;
+                        foundAllLayersGroup = true;
+                    }
+                });
+
+                // Only create a new one if none exists
+                if (!foundAllLayersGroup) {
+                    allLayersGroupId = createLayerGroup('All Layers');
+                }
             }
 
             // Ensure all layers are in the "All Layers" group
@@ -2357,7 +2456,19 @@ function enableRealtimeSync() {
 
             // Ensure "All Layers" group exists
             if (!allLayersGroupId || !layerGroups.has(allLayersGroupId)) {
-                allLayersGroupId = createLayerGroup('All Layers');
+                // Try to find existing "All Layers" group by name
+                let foundAllLayersGroup = false;
+                layerGroups.forEach((group, id) => {
+                    if (group.name === 'All Layers') {
+                        allLayersGroupId = id;
+                        foundAllLayersGroup = true;
+                    }
+                });
+
+                // Only create a new one if none exists
+                if (!foundAllLayersGroup) {
+                    allLayersGroupId = createLayerGroup('All Layers');
+                }
             }
 
             // Ensure all layers are in the "All Layers" group

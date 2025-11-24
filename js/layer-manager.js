@@ -178,7 +178,7 @@ class LayerManager {
             const mapLayers = this.mapManager.layers.get(layerId);
             if (mapLayers) {
                 // Remove and re-add layers to move them to the top
-                // Add in order: polygon, line, bubble (clusters), clusterLabel, symbol (markers)
+                // Add in order: polygon, line, bubble (clusters), clusterLabel, individualBubble, symbol (markers)
                 if (mapLayers.polygon) {
                     this.mapManager.map.layers.remove(mapLayers.polygon);
                     this.mapManager.map.layers.add(mapLayers.polygon);
@@ -194,6 +194,10 @@ class LayerManager {
                 if (mapLayers.clusterLabel) {
                     this.mapManager.map.layers.remove(mapLayers.clusterLabel);
                     this.mapManager.map.layers.add(mapLayers.clusterLabel);
+                }
+                if (mapLayers.individualBubble) {
+                    this.mapManager.map.layers.remove(mapLayers.individualBubble);
+                    this.mapManager.map.layers.add(mapLayers.individualBubble);
                 }
                 if (mapLayers.symbol) {
                     this.mapManager.map.layers.remove(mapLayers.symbol);
@@ -228,6 +232,9 @@ class LayerManager {
             }
             if (mapLayers.bubble) {
                 mapLayers.bubble.setOptions({ opacity: opacity });
+            }
+            if (mapLayers.individualBubble) {
+                mapLayers.individualBubble.setOptions({ opacity: opacity });
             }
             if (mapLayers.clusterLabel) {
                 mapLayers.clusterLabel.setOptions({ textOptions: { opacity: opacity } });
