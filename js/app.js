@@ -70,6 +70,19 @@ function loadFromLocalStorage() {
         if (state.layers && Object.keys(state.layers).length > 0) {
             layerManager.importLayers(state.layers);
 
+            // Ensure "All Layers" group exists
+            if (!allLayersGroupId || !layerGroups.has(allLayersGroupId)) {
+                allLayersGroupId = createLayerGroup('All Layers');
+            }
+
+            // Ensure all layers are in the "All Layers" group
+            const allLayersGroup = layerGroups.get(allLayersGroupId);
+            if (allLayersGroup) {
+                layerManager.getAllLayers().forEach(layer => {
+                    addLayerToGroup(layer.id, allLayersGroupId);
+                });
+            }
+
             // Re-apply property-based styling for layers that have it
             layerManager.getAllLayers().forEach(layer => {
                 if (layer.styleType && layer.styleProperty) {
@@ -2289,6 +2302,19 @@ async function handleLoadFromFirebase() {
 
             layerManager.importLayers(result.layers);
 
+            // Ensure "All Layers" group exists
+            if (!allLayersGroupId || !layerGroups.has(allLayersGroupId)) {
+                allLayersGroupId = createLayerGroup('All Layers');
+            }
+
+            // Ensure all layers are in the "All Layers" group
+            const allLayersGroup = layerGroups.get(allLayersGroupId);
+            if (allLayersGroup) {
+                layerManager.getAllLayers().forEach(layer => {
+                    addLayerToGroup(layer.id, allLayersGroupId);
+                });
+            }
+
             // Re-apply property-based styling for layers that have it
             layerManager.getAllLayers().forEach(layer => {
                 if (layer.styleType && layer.styleProperty) {
@@ -2328,6 +2354,19 @@ function enableRealtimeSync() {
             }
 
             layerManager.importLayers(updatedLayers);
+
+            // Ensure "All Layers" group exists
+            if (!allLayersGroupId || !layerGroups.has(allLayersGroupId)) {
+                allLayersGroupId = createLayerGroup('All Layers');
+            }
+
+            // Ensure all layers are in the "All Layers" group
+            const allLayersGroup = layerGroups.get(allLayersGroupId);
+            if (allLayersGroup) {
+                layerManager.getAllLayers().forEach(layer => {
+                    addLayerToGroup(layer.id, allLayersGroupId);
+                });
+            }
 
             // Re-apply property-based styling for layers that have it
             layerManager.getAllLayers().forEach(layer => {
