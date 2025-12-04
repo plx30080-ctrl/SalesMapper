@@ -29,13 +29,8 @@ class PluginManager {
         try {
             // Initialize plugin if it has an init method
             if (typeof plugin.init === 'function') {
-                plugin.init({
-                    eventBus,
-                    stateManager,
-                    utils: Utils,
-                    config: AppConfig,
-                    api: this.getPluginAPI()
-                });
+                const api = this.getPluginAPI();
+                plugin.init(api);
             }
 
             this.plugins.set(plugin.id, {
