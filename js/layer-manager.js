@@ -46,7 +46,7 @@ class LayerManager {
             layer.color = color;
         } else {
             // Create empty data source
-            this.mapManager.createDataSource(layerId);
+            this.mapManager.createDataSource(layerId, type === 'point');
             layer.color = this.mapManager.getNextColor();
         }
 
@@ -72,7 +72,8 @@ class LayerManager {
         layer.features.push(...features);
 
         // Add to map
-        this.mapManager.addFeaturesToLayer(layerId, features, layer.type);
+        const color = this.mapManager.addFeaturesToLayer(layerId, features, layer.type, layer.color);
+        layer.color = color;
 
         // Notify update
         this.notifyUpdate();
@@ -351,11 +352,12 @@ class LayerManager {
         this.mapManager.removeLayer(layerId);
 
         // Create new data source
-        this.mapManager.createDataSource(layerId);
+        this.mapManager.createDataSource(layerId, layer.type === 'point');
 
         // Add filtered features
         if (features.length > 0) {
-            this.mapManager.addFeaturesToLayer(layerId, features, layer.type);
+            const color = this.mapManager.addFeaturesToLayer(layerId, features, layer.type, layer.color);
+            layer.color = color;
         }
 
         // Restore visibility state
@@ -494,11 +496,11 @@ class LayerManager {
                 // Check if this layer has property-based styling
                 if (layer.styleType && layer.styleProperty && layer.colorMap) {
                     // Will be re-styled by app.js after import
-                    const color = this.mapManager.addFeaturesToLayer(layerId, layer.features, layer.type);
+                    const color = this.mapManager.addFeaturesToLayer(layerId, layer.features, layer.type, layer.color);
                     layer.color = color;
                 } else {
                     // Normal styling
-                    const color = this.mapManager.addFeaturesToLayer(layerId, layer.features, layer.type);
+                    const color = this.mapManager.addFeaturesToLayer(layerId, layer.features, layer.type, layer.color);
                     layer.color = color;
                 }
 
@@ -513,7 +515,7 @@ class LayerManager {
                 }
             } else {
                 // Create empty data source
-                this.mapManager.createDataSource(layerId);
+                this.mapManager.createDataSource(layerId, layer.type === 'point');
                 layer.color = this.mapManager.getNextColor();
             }
         }
