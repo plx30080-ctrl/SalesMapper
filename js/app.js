@@ -9,6 +9,10 @@ let layerManager;
 let csvParser;
 let geocodingService;
 
+// Global state for UI interactions
+let currentLayerForActions = null;  // Currently selected layer for context menu actions
+let currentCSVData = null;          // Currently loaded CSV data for import workflow
+
 // Data services are initialized in initDataServices()
 // Access via: storageService, firebaseService, dataSyncService
 
@@ -237,6 +241,19 @@ function setupEventBusSubscriptions() {
         updateLayerGroupList();
     });
 
+    // Layer-group membership events
+    eventBus.on('layer.grouped', ({ layerId, groupId }) => {
+        console.log('Layer added to group:', layerId, groupId);
+        updateLayerGroupList();
+        updateLayerList(layerManager.getAllLayers());
+    });
+
+    eventBus.on('layer.ungrouped', ({ layerId }) => {
+        console.log('Layer removed from group:', layerId);
+        updateLayerGroupList();
+        updateLayerList(layerManager.getAllLayers());
+    });
+
     eventBus.on('group.visibility.changed', ({ groupId, visible }) => {
         console.log('Group visibility changed:', groupId, visible);
         updateLayerList(layerManager.getAllLayers());
@@ -295,91 +312,6 @@ function setupMapCallbacks() {
     });
 
     console.log('Map callbacks setup complete');
-}
-
-/**
- * Handle drawing completion - add drawn shape to layer
- */
-function handleDrawingComplete(drawnShape) {
-    // Check if we have a target layer for the new feature
-    const targetLayerId = window.targetLayerForNewFeature;
-
-    if (targetLayerId) {
-        // Adding to existing layer
-        const layer = layerManager.getLayer(targetLayerId);
-        if (layer) {
-            const featureId = Utils.generateId('feature');
-            const newFeature = {
-                id: featureId,
-                name: `New ${drawnShape.type}`,
-                description: '',
-                wkt: drawnShape.type === 'Polygon'
-                    ? convertCoordsToWKT(drawnShape.coordinates, 'Polygon')
-                    : convertCoordsToWKT(drawnShape.coordinates, 'Point'),
-                latitude: drawnShape.type === 'Point' ? drawnShape.coordinates[1] : null,
-                longitude: drawnShape.type === 'Point' ? drawnShape.coordinates[0] : null
-            };
-
-            layerManager.addFeaturesToLayer(targetLayerId, [newFeature]);
-            toastManager.success(`Feature added to "${layer.name}"`);
-
-            // Clean up temporary shape from map (it's now part of the layer)
-            if (drawnShape.shape) {
-                drawnShape.shape.setMap(null);
-            }
-        }
-        window.targetLayerForNewFeature = null;
-    } else {
-        // No target layer - prompt user to create a new layer or select one
-        const layerName = prompt('Enter name for new layer:', `New ${drawnShape.type} Layer`);
-        if (layerName) {
-            const type = drawnShape.type === 'Point' ? 'point' : 'polygon';
-            const featureId = Utils.generateId('feature');
-            const newFeature = {
-                id: featureId,
-                name: `New ${drawnShape.type}`,
-                description: '',
-                wkt: drawnShape.type === 'Polygon'
-                    ? convertCoordsToWKT(drawnShape.coordinates, 'Polygon')
-                    : convertCoordsToWKT(drawnShape.coordinates, 'Point'),
-                latitude: drawnShape.type === 'Point' ? drawnShape.coordinates[1] : null,
-                longitude: drawnShape.type === 'Point' ? drawnShape.coordinates[0] : null
-            };
-
-            const layerId = layerManager.createLayer(layerName, [newFeature], type, {
-                source: 'drawn',
-                createdAt: new Date().toISOString()
-            });
-
-            // Add to "All Layers" group
-            addLayerToGroup(layerId, stateManager.get('allLayersGroupId'));
-
-            // Clean up temporary shape from map (it's now part of the layer)
-            if (drawnShape.shape) {
-                drawnShape.shape.setMap(null);
-            }
-
-            toastManager.success(`Layer "${layerName}" created with new ${drawnShape.type.toLowerCase()}`);
-        } else {
-            // User cancelled - remove the temporary shape
-            if (drawnShape.shape) {
-                drawnShape.shape.setMap(null);
-            }
-        }
-    }
-}
-
-/**
- * Convert coordinates to WKT format
- */
-function convertCoordsToWKT(coordinates, type) {
-    if (type === 'Point') {
-        return `POINT(${coordinates[0]} ${coordinates[1]})`;
-    } else if (type === 'Polygon') {
-        const ring = coordinates[0].map(coord => `${coord[0]} ${coord[1]}`).join(', ');
-        return `POLYGON((${ring}))`;
-    }
-    return '';
 }
 
 /**
