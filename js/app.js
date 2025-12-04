@@ -208,7 +208,7 @@ function setupEventBusSubscriptions() {
         // Clear feature info if it was the currently selected feature
         const currentFeature = stateManager.get('currentEditingFeature');
         if (currentFeature && currentFeature.id === featureId) {
-            stateManager.set('currentEditingFeature', null));
+            stateManager.set('currentEditingFeature', null);
             document.getElementById('featureInfo').innerHTML =
                 '<p class="empty-state">Click on a feature to see details</p>';
         }
@@ -255,7 +255,7 @@ function setupMapClickHandler() {
         // For Google Maps, we clear selection on map click
         // Feature clicks are handled separately in the data layer
         mapManager.clearSelectedFeature();
-        stateManager.set('currentEditingFeature', null));
+        stateManager.set('currentEditingFeature', null);
 
         // Reset feature info panel
         document.getElementById('featureInfo').innerHTML =
@@ -385,17 +385,6 @@ function setupEventListeners() {
             contextMenu.classList.remove('show');
         }
     });
-}
-
-/**
- * Show/close modal helpers
- */
-function modalManager.show(modalId) {
-    document.getElementById(modalId).classList.add('show');
-}
-
-function modalManager.close(modalId) {
-    document.getElementById(modalId).classList.remove('show');
 }
 
 /**
@@ -1749,7 +1738,7 @@ function selectFeature(layerId, feature) {
         layerId: layerId,
         id: feature.id,
         properties: feature
-    };
+    });
     updateFeatureInfo(feature);
 }
 
@@ -1761,7 +1750,7 @@ function editFeature(layerId, feature) {
         layerId: layerId,
         id: feature.id,
         properties: feature
-    };
+    });
     openEditModal();
 }
 
@@ -2328,7 +2317,7 @@ function updateLegend(layers) {
  * Handle feature selection on map
  */
 function handleFeatureSelection(selectedFeature) {
-    stateManager.set('currentEditingFeature', selectedFeature;
+    stateManager.set('currentEditingFeature', selectedFeature);
     updateFeatureInfo(selectedFeature.properties);
     console.log('Feature selected:', selectedFeature);
 }
