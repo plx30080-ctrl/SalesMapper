@@ -170,7 +170,7 @@ class LayerManager {
      * Layers at the top of the list appear on top on the map
      */
     syncLayerZOrder() {
-        // Reverse the order because Azure Maps renders layers bottom-to-top
+        // Reverse the order because maps typically render layers bottom-to-top
         // (last added layer appears on top)
         const reversedOrder = [...this.layerOrder].reverse();
 

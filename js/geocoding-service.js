@@ -1,12 +1,12 @@
 /**
  * Geocoding Service
- * Handles address geocoding using Azure Maps API
+ * Handles address geocoding using Google Maps Geocoding API
  */
 
 class GeocodingService {
-    constructor(subscriptionKey) {
-        this.subscriptionKey = subscriptionKey;
-        this.azureMapsUrl = 'https://atlas.microsoft.com/search/address/json';
+    constructor(apiKey) {
+        this.apiKey = apiKey;
+        this.geocodingUrl = 'https://maps.googleapis.com/maps/api/geocode/json';
         this.delayMs = 200; // Delay between requests to respect rate limits
     }
 
@@ -27,16 +27,13 @@ class GeocodingService {
         }
 
         const params = new URLSearchParams({
-            'api-version': '1.0',
-            'subscription-key': this.subscriptionKey,
-            'query': address,
-            'limit': '1'
+            'key': this.apiKey,
+            'address': address
         });
 
         try {
-            const response = await fetch(`${this.azureMapsUrl}?${params}`, {
-                method: 'GET',
-                timeout: 10000
+            const response = await fetch(`${this.geocodingUrl}?${params}`, {
+                method: 'GET'
             });
 
             if (!response.ok) {
@@ -51,22 +48,35 @@ class GeocodingService {
 
             const data = await response.json();
 
-            if (data.results && data.results.length > 0) {
+            if (data.status === 'OK' && data.results && data.results.length > 0) {
                 const result = data.results[0];
-                const position = result.position || {};
+                const location = result.geometry.location;
+
+                // Calculate confidence score based on location_type
+                // ROOFTOP = 1.0, RANGE_INTERPOLATED = 0.8, GEOMETRIC_CENTER = 0.6, APPROXIMATE = 0.4
+                let confidence = 0.5;
+                if (result.geometry.location_type === 'ROOFTOP') {
+                    confidence = 1.0;
+                } else if (result.geometry.location_type === 'RANGE_INTERPOLATED') {
+                    confidence = 0.8;
+                } else if (result.geometry.location_type === 'GEOMETRIC_CENTER') {
+                    confidence = 0.6;
+                } else if (result.geometry.location_type === 'APPROXIMATE') {
+                    confidence = 0.4;
+                }
 
                 return {
                     success: true,
-                    latitude: position.lat,
-                    longitude: position.lon,
-                    confidence: result.score || 0,
-                    formattedAddress: result.address?.freeformAddress || address
+                    latitude: location.lat,
+                    longitude: location.lng,
+                    confidence: confidence,
+                    formattedAddress: result.formatted_address || address
                 };
             }
 
             return {
                 success: false,
-                error: 'No results found',
+                error: data.status === 'ZERO_RESULTS' ? 'No results found' : `Geocoding failed: ${data.status}`,
                 latitude: null,
                 longitude: null,
                 confidence: null

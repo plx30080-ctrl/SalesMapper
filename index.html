@@ -5,9 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sales Territory Mapper</title>
 
-    <!-- Azure Maps CSS -->
-    <link rel="stylesheet" href="https://atlas.microsoft.com/sdk/javascript/mapcontrol/2/atlas.min.css" />
-
     <!-- Custom CSS -->
     <link rel="stylesheet" href="css/styles.css">
 </head>
@@ -69,7 +66,7 @@
 
             <!-- Map Container -->
             <main class="map-container">
-                <div id="azureMap"></div>
+                <div id="googleMap"></div>
 
                 <!-- Map Controls Overlay -->
                 <div class="map-controls">
@@ -391,12 +388,8 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 
-    <!-- Azure Maps SDK -->
-    <script src="https://atlas.microsoft.com/sdk/javascript/mapcontrol/2/atlas.min.js"></script>
-
-    <!-- Azure Maps Drawing Tools -->
-    <link rel="stylesheet" href="https://atlas.microsoft.com/sdk/javascript/drawing/0/atlas-drawing.min.css" />
-    <script src="https://atlas.microsoft.com/sdk/javascript/drawing/0/atlas-drawing.min.js"></script>
+    <!-- Google Maps JavaScript API -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCUdAbY7osfgatmss5tCYOgybqE1mzEwzA&libraries=places,drawing,marker&v=weekly"></script>
 
     <!-- PapaParse for CSV parsing -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
