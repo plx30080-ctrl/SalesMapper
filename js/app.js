@@ -1905,8 +1905,8 @@ function applySingleColorStyle(layerId, color) {
 
     // Re-render layer with new color
     mapManager.removeLayer(layerId);
-    mapManager.createDataSource(layerId);
-    mapManager.addFeaturesToLayer(layerId, layer.features, layer.type);
+    mapManager.createDataSource(layerId, layer.type === 'point');
+    mapManager.addFeaturesToLayer(layerId, layer.features, layer.type, color);
 
     layerManager.notifyUpdate();
 }

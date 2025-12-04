@@ -14,6 +14,7 @@ class MapManager {
         this.selectedFeature = null;
         this.onFeatureClick = null;
         this.drawingManager = null;
+        this.isDrawing = false;
         this.onDrawComplete = null;
         this.colorPalette = [
             '#0078d4', '#d13438', '#107c10', '#ffb900', '#8764b8',
@@ -93,6 +94,10 @@ class MapManager {
      */
     startDrawing(mode) {
         this.drawingMode = mode;
+        this.isDrawing = true;
+
+        // Disable feature interactivity while drawing to prevent selections under the cursor
+        this.updateLayerClickability(false);
 
         // Remove existing click listener if any
         if (this.mapClickListener) {
@@ -232,7 +237,11 @@ class MapManager {
      */
     stopDrawing() {
         this.drawingMode = null;
+        this.isDrawing = false;
         this.polygonPath = [];
+
+        // Re-enable feature interactivity now that drawing has stopped
+        this.updateLayerClickability(true);
 
         // Remove map click listener
         if (this.mapClickListener) {
@@ -382,15 +391,7 @@ class MapManager {
         const dataLayer = dataSource.dataLayer;
 
         // Set style for polygons
-        dataLayer.setStyle((feature) => {
-            return {
-                fillColor: color,
-                fillOpacity: 0.5,
-                strokeColor: color,
-                strokeWeight: 2,
-                clickable: true
-            };
-        });
+        dataLayer.setStyle(() => this.buildPolygonStyle(color));
 
         // Store layer reference
         this.layers.set(layerId, {
@@ -402,6 +403,37 @@ class MapManager {
         // Add click event
         dataLayer.addListener('click', (event) => {
             this.handleFeatureClick(event, layerId);
+        });
+    }
+
+    /**
+     * Build polygon style based on color and current drawing state
+     * @param {string} color - Polygon color
+     * @returns {Object} Style options
+     */
+    buildPolygonStyle(color) {
+        return {
+            fillColor: color,
+            fillOpacity: 0.5,
+            strokeColor: color,
+            strokeWeight: 2,
+            clickable: !this.isDrawing
+        };
+    }
+
+    /**
+     * Enable or disable interactivity on all polygon layers
+     * @param {boolean} enabled - Whether features should be clickable
+     */
+    updateLayerClickability(enabled) {
+        this.layers.forEach(layer => {
+            if (layer.type === 'polygon' && layer.dataLayer) {
+                layer.dataLayer.setStyle(() => this.buildPolygonStyle(layer.color));
+            }
+
+            if (layer.markers) {
+                layer.markers.forEach(marker => marker.setClickable(enabled));
+            }
         });
     }
 
@@ -432,6 +464,18 @@ class MapManager {
         if (!dataSource) {
             console.error(`Data source for layer ${layerId} not found`);
             return;
+        }
+
+        // Clear any existing markers/clusterers for this layer to prevent duplicates
+        const existingLayer = this.layers.get(layerId);
+        if (existingLayer) {
+            if (existingLayer.clusterer) {
+                existingLayer.clusterer.clearMarkers();
+                existingLayer.clusterer.setMap(null);
+            }
+            if (existingLayer.markers) {
+                existingLayer.markers.forEach(marker => marker.setMap(null));
+            }
         }
 
         const markers = [];
@@ -554,7 +598,7 @@ class MapManager {
      * @param {Array} features - Array of features
      * @param {string} type - Feature type ('polygon' or 'point')
      */
-    addFeaturesToLayer(layerId, features, type) {
+    addFeaturesToLayer(layerId, features, type, preferredColor = null) {
         let dataSource = this.dataSources.get(layerId);
 
         // Create data source if it doesn't exist
@@ -564,8 +608,10 @@ class MapManager {
             dataSource = this.dataSources.get(layerId);
         }
 
-        // Get next color
-        const color = this.getNextColor();
+        // Reuse an existing color when provided or already assigned to the layer
+        // to avoid palette drift when re-rendering or importing layers.
+        const existingLayer = this.layers.get(layerId);
+        const color = preferredColor || existingLayer?.color || this.getNextColor();
 
         // Convert features to GeoJSON and add to data layer
         const geoJsonFeatures = features.map((feature, index) => {
@@ -634,6 +680,10 @@ class MapManager {
      * @param {string} layerId - Layer ID
      */
     handleFeatureClick(event, layerId) {
+        if (this.isDrawing) {
+            return; // Ignore feature clicks while drawing
+        }
+
         const feature = event.feature;
         this.selectedFeature = {
             feature: feature,
@@ -777,6 +827,56 @@ class MapManager {
         if (hasFeatures) {
             this.map.fitBounds(bounds, 50); // 50px padding
         }
+    }
+
+    /**
+     * Reorder layers on the map to respect the provided ordering
+     * (last item appears on top). Uses Google Maps primitives instead of the
+     * removed Azure Maps layer APIs.
+     * @param {Array<string>} orderedLayerIds - Layer IDs in back-to-front order
+     */
+    reorderLayers(orderedLayerIds) {
+        if (!Array.isArray(orderedLayerIds)) return;
+
+        orderedLayerIds.forEach((layerId, index) => {
+            const layer = this.layers.get(layerId);
+            if (!layer) return;
+
+            // Bring polygon data layers to the front by detaching and reattaching
+            if (layer.dataLayer && layer.type === 'polygon') {
+                layer.dataLayer.setMap(null);
+                layer.dataLayer.setMap(this.map);
+
+                // Ensure a consistent z-index for polygon styles without overriding
+                // any existing data-driven styling callbacks.
+                const currentStyle = layer.dataLayer.getStyle() || {};
+                const zIndex = index + 1;
+                if (typeof currentStyle === 'function') {
+                    layer.dataLayer.setStyle((feature) => ({
+                        ...(currentStyle(feature) || {}),
+                        zIndex
+                    }));
+                } else {
+                    layer.dataLayer.setStyle({ ...(currentStyle || {}), zIndex });
+                }
+            }
+
+            // For point layers, update markers/clusterers to respect order
+            if (layer.markers) {
+                const zIndex = index + 1;
+                layer.markers.forEach(marker => {
+                    marker.setZIndex(zIndex);
+                    marker.setMap(null);
+                    marker.setMap(this.map);
+                });
+            }
+
+            if (layer.clusterer) {
+                // Reattach clusterer to force redraw ordering
+                layer.clusterer.setMap(null);
+                layer.clusterer.setMap(this.map);
+            }
+        });
     }
 
     /**

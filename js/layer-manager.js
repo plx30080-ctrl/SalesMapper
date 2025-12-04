@@ -46,7 +46,7 @@ class LayerManager {
             layer.color = color;
         } else {
             // Create empty data source
-            this.mapManager.createDataSource(layerId);
+            this.mapManager.createDataSource(layerId, type === 'point');
             layer.color = this.mapManager.getNextColor();
         }
 
@@ -72,7 +72,8 @@ class LayerManager {
         layer.features.push(...features);
 
         // Add to map
-        this.mapManager.addFeaturesToLayer(layerId, features, layer.type);
+        const color = this.mapManager.addFeaturesToLayer(layerId, features, layer.type, layer.color);
+        layer.color = color;
 
         // Notify update
         this.notifyUpdate();
@@ -174,37 +175,9 @@ class LayerManager {
         // (last added layer appears on top)
         const reversedOrder = [...this.layerOrder].reverse();
 
-        reversedOrder.forEach(layerId => {
-            const mapLayers = this.mapManager.layers.get(layerId);
-            if (mapLayers) {
-                // Remove and re-add layers to move them to the top
-                // Add in order: polygon, line, bubble (clusters), clusterLabel, individualBubble, symbol (markers)
-                if (mapLayers.polygon) {
-                    this.mapManager.map.layers.remove(mapLayers.polygon);
-                    this.mapManager.map.layers.add(mapLayers.polygon);
-                }
-                if (mapLayers.line) {
-                    this.mapManager.map.layers.remove(mapLayers.line);
-                    this.mapManager.map.layers.add(mapLayers.line);
-                }
-                if (mapLayers.bubble) {
-                    this.mapManager.map.layers.remove(mapLayers.bubble);
-                    this.mapManager.map.layers.add(mapLayers.bubble);
-                }
-                if (mapLayers.clusterLabel) {
-                    this.mapManager.map.layers.remove(mapLayers.clusterLabel);
-                    this.mapManager.map.layers.add(mapLayers.clusterLabel);
-                }
-                if (mapLayers.individualBubble) {
-                    this.mapManager.map.layers.remove(mapLayers.individualBubble);
-                    this.mapManager.map.layers.add(mapLayers.individualBubble);
-                }
-                if (mapLayers.symbol) {
-                    this.mapManager.map.layers.remove(mapLayers.symbol);
-                    this.mapManager.map.layers.add(mapLayers.symbol);
-                }
-            }
-        });
+        // Delegate ordering to the map manager so it can use the correct
+        // Google Maps APIs (the old Azure Maps calls are no longer valid).
+        this.mapManager.reorderLayers(reversedOrder);
     }
 
     /**
@@ -379,11 +352,12 @@ class LayerManager {
         this.mapManager.removeLayer(layerId);
 
         // Create new data source
-        this.mapManager.createDataSource(layerId);
+        this.mapManager.createDataSource(layerId, layer.type === 'point');
 
         // Add filtered features
         if (features.length > 0) {
-            this.mapManager.addFeaturesToLayer(layerId, features, layer.type);
+            const color = this.mapManager.addFeaturesToLayer(layerId, features, layer.type, layer.color);
+            layer.color = color;
         }
 
         // Restore visibility state
@@ -522,11 +496,11 @@ class LayerManager {
                 // Check if this layer has property-based styling
                 if (layer.styleType && layer.styleProperty && layer.colorMap) {
                     // Will be re-styled by app.js after import
-                    const color = this.mapManager.addFeaturesToLayer(layerId, layer.features, layer.type);
+                    const color = this.mapManager.addFeaturesToLayer(layerId, layer.features, layer.type, layer.color);
                     layer.color = color;
                 } else {
                     // Normal styling
-                    const color = this.mapManager.addFeaturesToLayer(layerId, layer.features, layer.type);
+                    const color = this.mapManager.addFeaturesToLayer(layerId, layer.features, layer.type, layer.color);
                     layer.color = color;
                 }
 
@@ -541,7 +515,7 @@ class LayerManager {
                 }
             } else {
                 // Create empty data source
-                this.mapManager.createDataSource(layerId);
+                this.mapManager.createDataSource(layerId, layer.type === 'point');
                 layer.color = this.mapManager.getNextColor();
             }
         }
