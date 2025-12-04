@@ -223,7 +223,7 @@ function setupEventListeners() {
     document.getElementById('addGroupBtn').addEventListener('click', handleAddGroup);
 
     // Layer Management
-    document.getElementById('addLayerBtn').addEventListener('click', () => showModal('uploadModal'));
+    document.getElementById('addLayerBtn').addEventListener('click', handleAddLayerClick);
 
     // Filtering
     document.getElementById('applyFilterBtn').addEventListener('click', handleApplyFilter);
@@ -319,6 +319,51 @@ function showModal(modalId) {
 
 function closeModal(modalId) {
     document.getElementById(modalId).classList.remove('show');
+}
+
+/**
+ * Handle add layer button click - offers choice to create blank or upload
+ */
+function handleAddLayerClick() {
+    const choice = confirm('Create a blank layer?\n\nClick OK to create a blank layer, or Cancel to upload data from a file.');
+
+    if (choice) {
+        // Create blank layer
+        handleCreateBlankLayer();
+    } else {
+        // Upload data
+        showModal('uploadModal');
+    }
+}
+
+/**
+ * Handle creating a blank layer
+ */
+function handleCreateBlankLayer() {
+    const layerName = prompt('Enter layer name:', 'New Layer');
+    if (!layerName || layerName.trim() === '') {
+        return;
+    }
+
+    // Ask for layer type
+    const isPoint = confirm('Layer type:\n\nOK = Point layer (markers)\nCancel = Polygon layer (shapes)');
+    const layerType = isPoint ? 'point' : 'polygon';
+
+    // Create empty layer
+    const layerId = layerManager.createLayer(layerName.trim(), [], layerType, {
+        source: 'manual',
+        createdAt: new Date().toISOString()
+    });
+
+    // Add to "All Layers" group
+    addLayerToGroup(layerId, allLayersGroupId);
+
+    // Also add to active group if one is selected (and it's not "All Layers")
+    if (activeGroup && activeGroup !== allLayersGroupId) {
+        addLayerToGroup(layerId, activeGroup);
+    }
+
+    showToast(`Blank ${layerType} layer "${layerName}" created. Use the layer menu to add features.`, 'success');
 }
 
 /**
@@ -546,23 +591,6 @@ function handleDrawingComplete(drawingData) {
         return;
     }
 
-    // Create WKT geometry string
-    let wkt;
-    if (drawingData.type === 'Point') {
-        wkt = `POINT(${drawingData.coordinates[0]} ${drawingData.coordinates[1]})`;
-    } else if (drawingData.type === 'Polygon') {
-        const coords = drawingData.coordinates[0].map(c => `${c[0]} ${c[1]}`).join(', ');
-        wkt = `POLYGON((${coords}))`;
-    }
-
-    const properties = {
-        name: name,
-        id: `drawn_${Date.now()}`,
-        source: 'manual',
-        geometry: wkt,
-        type: drawingData.type
-    };
-
     let targetLayerId;
 
     // Check if we're adding to a specific layer
@@ -573,7 +601,7 @@ function handleDrawingComplete(drawingData) {
         // Original behavior: add to first layer or create new one
         const layers = layerManager.getAllLayers();
         if (layers.length === 0) {
-            targetLayerId = layerManager.createLayer('Drawn Features');
+            targetLayerId = layerManager.createLayer('Drawn Features', [], drawingData.type === 'Point' ? 'point' : 'polygon');
             // Always add to "All Layers" group
             addLayerToGroup(targetLayerId, allLayersGroupId);
         } else {
@@ -582,17 +610,57 @@ function handleDrawingComplete(drawingData) {
     }
 
     const layer = layerManager.getLayer(targetLayerId);
-    if (layer) {
-        layer.features.push(properties);
-        layerManager.notifyUpdate();
-
-        // Remove the temporary drawn shape since it will be re-rendered as part of the layer
+    if (!layer) {
+        showToast('Error: Target layer not found', 'error');
         if (drawingData.shape) {
             drawingData.shape.setMap(null);
         }
-
-        showToast(`Feature added to "${layer.name}"`, 'success');
+        return;
     }
+
+    // Build feature properties based on layer type
+    const featureId = `drawn_${Date.now()}`;
+    let feature;
+
+    if (layer.type === 'point' && drawingData.type === 'Point') {
+        // Point feature
+        feature = {
+            id: featureId,
+            name: name,
+            latitude: drawingData.coordinates[1],
+            longitude: drawingData.coordinates[0],
+            source: 'manual',
+            createdAt: new Date().toISOString()
+        };
+    } else if (layer.type === 'polygon' && drawingData.type === 'Polygon') {
+        // Polygon feature
+        const coords = drawingData.coordinates[0].map(c => `${c[0]} ${c[1]}`).join(', ');
+        const wkt = `POLYGON((${coords}))`;
+        feature = {
+            id: featureId,
+            name: name,
+            wkt: wkt,
+            source: 'manual',
+            createdAt: new Date().toISOString()
+        };
+    } else {
+        // Type mismatch
+        showToast(`Cannot add ${drawingData.type} to ${layer.type} layer`, 'error');
+        if (drawingData.shape) {
+            drawingData.shape.setMap(null);
+        }
+        return;
+    }
+
+    // Remove the temporary drawn shape from map
+    if (drawingData.shape) {
+        drawingData.shape.setMap(null);
+    }
+
+    // Add feature to layer using the layer manager's method
+    layerManager.addFeaturesToLayer(targetLayerId, [feature]);
+
+    showToast(`Feature "${name}" added to "${layer.name}"`, 'success');
 }
 
 /**
@@ -1464,12 +1532,14 @@ function createLayerItem(layer) {
             featuresContainer.style.display = 'none';
             expandBtn.textContent = '▶';
             expandBtn.title = 'Expand layer';
+            div.classList.remove('expanded');
         } else {
             // Populate features list
             populateFeaturesList(featuresContainer, layer);
             featuresContainer.style.display = 'block';
             expandBtn.textContent = '▼';
             expandBtn.title = 'Collapse layer';
+            div.classList.add('expanded');
         }
     });
 
@@ -1513,7 +1583,7 @@ function populateFeaturesList(container, layer) {
     container.innerHTML = '';
 
     if (!layer.features || layer.features.length === 0) {
-        container.innerHTML = '<p class="empty-state" style="padding: 0.5rem; font-size: 0.85rem;">No features in this layer</p>';
+        container.innerHTML = '<p class="empty-state">No features in this layer.<br><small>Use the layer menu (⋮) to add features.</small></p>';
         return;
     }
 
