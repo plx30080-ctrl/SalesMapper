@@ -1,16 +1,59 @@
 /**
  * Layer Manager
  * Manages layer creation, editing, filtering, and sorting
+ * Integrated with StateManager and EventBus
  */
 
 class LayerManager {
     constructor(mapManager) {
         this.mapManager = mapManager;
-        this.layers = new Map(); // layerId -> layer data
-        this.layerOrder = []; // Array of layer IDs in display order
         this.activeFilters = new Map(); // layerId -> filter config
         this.activeSorts = new Map(); // layerId -> sort config
-        this.onLayerUpdate = null;
+
+        // Use StateManager for layers data instead of local storage
+        // StateManager is initialized in app.js, so layers are managed centrally
+    }
+
+    /**
+     * Get layers from state
+     */
+    get layers() {
+        return stateManager.get('layers') || new Map();
+    }
+
+    /**
+     * Set layers in state
+     */
+    set layers(value) {
+        stateManager.set('layers', value);
+    }
+
+    /**
+     * Get layer order from state
+     */
+    get layerOrder() {
+        return stateManager.get('layerOrder') || [];
+    }
+
+    /**
+     * Set layer order in state
+     */
+    set layerOrder(value) {
+        stateManager.set('layerOrder', value);
+    }
+
+    /**
+     * Get layer groups from state
+     */
+    get layerGroups() {
+        return stateManager.get('layerGroups') || new Map();
+    }
+
+    /**
+     * Set layer groups in state
+     */
+    set layerGroups(value) {
+        stateManager.set('layerGroups', value);
     }
 
     /**
@@ -22,7 +65,7 @@ class LayerManager {
      * @returns {string} Layer ID
      */
     createLayer(name, features = [], type = 'point', metadata = {}) {
-        const layerId = this.generateLayerId(name);
+        const layerId = Utils.generateId('layer');
 
         const layer = {
             id: layerId,
@@ -32,13 +75,19 @@ class LayerManager {
             visible: true,
             opacity: 1.0,
             color: null,
+            groupId: metadata.groupId || null,
             metadata: metadata,
-            createdAt: new Date().toISOString()
+            createdAt: Utils.formatDate()
         };
 
-        // Store layer
-        this.layers.set(layerId, layer);
-        this.layerOrder.push(layerId);
+        // Store layer in state
+        const layers = this.layers;
+        layers.set(layerId, layer);
+        this.layers = layers;
+
+        const layerOrder = this.layerOrder;
+        layerOrder.push(layerId);
+        this.layerOrder = layerOrder;
 
         // Add to map if there are features
         if (features.length > 0) {
@@ -50,8 +99,8 @@ class LayerManager {
             layer.color = this.mapManager.getNextColor();
         }
 
-        // Notify update
-        this.notifyUpdate();
+        // Emit event
+        eventBus.emit('layer.created', { layerId, layer });
 
         return layerId;
     }
@@ -62,7 +111,8 @@ class LayerManager {
      * @param {Array} features - Array of features to add
      */
     addFeaturesToLayer(layerId, features) {
-        const layer = this.layers.get(layerId);
+        const layers = this.layers;
+        const layer = layers.get(layerId);
         if (!layer) {
             console.error(`Layer ${layerId} not found`);
             return;
@@ -70,13 +120,15 @@ class LayerManager {
 
         // Add to layer data
         layer.features.push(...features);
+        layers.set(layerId, layer);
+        this.layers = layers;
 
         // Add to map
         const color = this.mapManager.addFeaturesToLayer(layerId, features, layer.type, layer.color);
         layer.color = color;
 
-        // Notify update
-        this.notifyUpdate();
+        // Emit event
+        eventBus.emit('features.added', { layerId, features, count: features.length });
     }
 
     /**
@@ -84,14 +136,18 @@ class LayerManager {
      * @param {string} layerId - Layer ID
      */
     toggleLayerVisibility(layerId) {
-        const layer = this.layers.get(layerId);
+        const layers = this.layers;
+        const layer = layers.get(layerId);
         if (!layer) return;
 
         layer.visible = !layer.visible;
+        layers.set(layerId, layer);
+        this.layers = layers;
+
         this.mapManager.toggleLayerVisibility(layerId, layer.visible);
 
-        // Notify update
-        this.notifyUpdate();
+        // Emit event
+        eventBus.emit('layer.visibility.changed', { layerId, visible: layer.visible });
     }
 
     /**
@@ -99,25 +155,30 @@ class LayerManager {
      * @param {string} layerId - Layer ID
      */
     deleteLayer(layerId) {
-        const layer = this.layers.get(layerId);
+        const layers = this.layers;
+        const layer = layers.get(layerId);
         if (!layer) return;
 
         // Remove from map
         this.mapManager.removeLayer(layerId);
 
         // Remove from storage
-        this.layers.delete(layerId);
+        layers.delete(layerId);
+        this.layers = layers;
+
         this.activeFilters.delete(layerId);
         this.activeSorts.delete(layerId);
 
         // Remove from order
-        const index = this.layerOrder.indexOf(layerId);
+        const layerOrder = this.layerOrder;
+        const index = layerOrder.indexOf(layerId);
         if (index > -1) {
-            this.layerOrder.splice(index, 1);
+            layerOrder.splice(index, 1);
+            this.layerOrder = layerOrder;
         }
 
-        // Notify update
-        this.notifyUpdate();
+        // Emit event
+        eventBus.emit('layer.deleted', { layerId, layer });
 
         return layer;
     }
@@ -148,21 +209,24 @@ class LayerManager {
      * @param {string} direction - 'up' or 'down'
      */
     moveLayer(layerId, direction) {
-        const index = this.layerOrder.indexOf(layerId);
+        const layerOrder = this.layerOrder;
+        const index = layerOrder.indexOf(layerId);
         if (index === -1) return;
 
         if (direction === 'up' && index > 0) {
             // Swap with previous
-            [this.layerOrder[index - 1], this.layerOrder[index]] =
-            [this.layerOrder[index], this.layerOrder[index - 1]];
+            [layerOrder[index - 1], layerOrder[index]] =
+            [layerOrder[index], layerOrder[index - 1]];
+            this.layerOrder = layerOrder;
             this.syncLayerZOrder();
-            this.notifyUpdate();
-        } else if (direction === 'down' && index < this.layerOrder.length - 1) {
+            eventBus.emit('layer.reordered', { layerId, direction });
+        } else if (direction === 'down' && index < layerOrder.length - 1) {
             // Swap with next
-            [this.layerOrder[index], this.layerOrder[index + 1]] =
-            [this.layerOrder[index + 1], this.layerOrder[index]];
+            [layerOrder[index], layerOrder[index + 1]] =
+            [layerOrder[index + 1], layerOrder[index]];
+            this.layerOrder = layerOrder;
             this.syncLayerZOrder();
-            this.notifyUpdate();
+            eventBus.emit('layer.reordered', { layerId, direction });
         }
     }
 
@@ -214,7 +278,7 @@ class LayerManager {
             }
         }
 
-        this.notifyUpdate();
+        eventBus.emit('layer.opacity.changed', { layerId, opacity });
     }
 
     /**
@@ -224,7 +288,8 @@ class LayerManager {
      * @param {Object} newProperties - Updated properties
      */
     updateFeature(layerId, featureId, newProperties) {
-        const layer = this.layers.get(layerId);
+        const layers = this.layers;
+        const layer = layers.get(layerId);
         if (!layer) return;
 
         // Find and update feature in layer data
@@ -235,11 +300,14 @@ class LayerManager {
                 ...newProperties
             };
 
+            layers.set(layerId, layer);
+            this.layers = layers;
+
             // Update on map
             this.mapManager.updateFeatureProperties(layerId, featureId, newProperties);
 
-            // Notify update
-            this.notifyUpdate();
+            // Emit event
+            eventBus.emit('feature.updated', { layerId, featureId, properties: newProperties });
         }
     }
 
@@ -249,17 +317,20 @@ class LayerManager {
      * @param {string} featureId - Feature ID
      */
     deleteFeature(layerId, featureId) {
-        const layer = this.layers.get(layerId);
+        const layers = this.layers;
+        const layer = layers.get(layerId);
         if (!layer) return;
 
         // Remove from layer data
         layer.features = layer.features.filter(f => f.id !== featureId);
+        layers.set(layerId, layer);
+        this.layers = layers;
 
         // Remove from map
         this.mapManager.removeFeature(layerId, featureId);
 
-        // Notify update
-        this.notifyUpdate();
+        // Emit event
+        eventBus.emit('feature.deleted', { layerId, featureId });
     }
 
     /**
@@ -334,9 +405,12 @@ class LayerManager {
 
         // Update layer features order
         layer.features = sortedFeatures;
+        const layers = this.layers;
+        layers.set(layerId, layer);
+        this.layers = layers;
 
-        // Notify update
-        this.notifyUpdate();
+        // Emit event
+        eventBus.emit('layer.sorted', { layerId, column, direction });
     }
 
     /**
@@ -526,37 +600,172 @@ class LayerManager {
         // Sync the layer z-order on the map to match the restored order
         this.syncLayerZOrder();
 
-        // Notify update
-        this.notifyUpdate();
+        // Emit event
+        eventBus.emit('layers.imported', { count: this.layers.size });
     }
 
     /**
-     * Generate unique layer ID
-     * @param {string} name - Layer name
-     * @returns {string} Layer ID
+     * Create a layer group
+     * @param {string} name - Group name
+     * @param {Object} metadata - Group metadata
+     * @returns {string} Group ID
      */
-    generateLayerId(name) {
-        const timestamp = Date.now();
-        const random = Math.random().toString(36).substring(7);
-        const safeName = name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-        return `${safeName}_${timestamp}_${random}`;
+    createLayerGroup(name, metadata = {}) {
+        const groupId = Utils.generateId('group');
+
+        const group = {
+            id: groupId,
+            name: name,
+            layerIds: [],
+            visible: true,
+            expanded: true,
+            metadata: metadata,
+            createdAt: Utils.formatDate()
+        };
+
+        const layerGroups = this.layerGroups;
+        layerGroups.set(groupId, group);
+        this.layerGroups = layerGroups;
+
+        eventBus.emit('group.created', { groupId, group });
+
+        return groupId;
     }
 
     /**
-     * Set update callback
-     * @param {Function} callback - Callback function
+     * Add layer to group
+     * @param {string} layerId - Layer ID
+     * @param {string} groupId - Group ID
      */
-    setOnLayerUpdate(callback) {
-        this.onLayerUpdate = callback;
-    }
+    addLayerToGroup(layerId, groupId) {
+        const layers = this.layers;
+        const layer = layers.get(layerId);
+        if (!layer) return;
 
-    /**
-     * Notify layer update
-     */
-    notifyUpdate() {
-        if (this.onLayerUpdate) {
-            this.onLayerUpdate(this.getAllLayers());
+        const layerGroups = this.layerGroups;
+        const group = layerGroups.get(groupId);
+        if (!group) return;
+
+        // Remove from previous group if exists
+        if (layer.groupId) {
+            this.removeLayerFromGroup(layerId);
         }
+
+        // Add to new group
+        layer.groupId = groupId;
+        layers.set(layerId, layer);
+        this.layers = layers;
+
+        group.layerIds.push(layerId);
+        layerGroups.set(groupId, group);
+        this.layerGroups = layerGroups;
+
+        eventBus.emit('layer.grouped', { layerId, groupId });
+    }
+
+    /**
+     * Remove layer from group
+     * @param {string} layerId - Layer ID
+     */
+    removeLayerFromGroup(layerId) {
+        const layers = this.layers;
+        const layer = layers.get(layerId);
+        if (!layer || !layer.groupId) return;
+
+        const layerGroups = this.layerGroups;
+        const group = layerGroups.get(layer.groupId);
+        if (group) {
+            group.layerIds = group.layerIds.filter(id => id !== layerId);
+            layerGroups.set(group.id, group);
+            this.layerGroups = layerGroups;
+        }
+
+        layer.groupId = null;
+        layers.set(layerId, layer);
+        this.layers = layers;
+
+        eventBus.emit('layer.ungrouped', { layerId });
+    }
+
+    /**
+     * Delete layer group
+     * @param {string} groupId - Group ID
+     */
+    deleteLayerGroup(groupId) {
+        const layerGroups = this.layerGroups;
+        const group = layerGroups.get(groupId);
+        if (!group) return;
+
+        // Ungroup all layers in this group
+        group.layerIds.forEach(layerId => {
+            this.removeLayerFromGroup(layerId);
+        });
+
+        layerGroups.delete(groupId);
+        this.layerGroups = layerGroups;
+
+        eventBus.emit('group.deleted', { groupId });
+    }
+
+    /**
+     * Get layer group
+     * @param {string} groupId - Group ID
+     * @returns {Object} Group data
+     */
+    getLayerGroup(groupId) {
+        return this.layerGroups.get(groupId);
+    }
+
+    /**
+     * Get all layer groups
+     * @returns {Array} Array of all groups
+     */
+    getAllLayerGroups() {
+        return Array.from(this.layerGroups.values());
+    }
+
+    /**
+     * Toggle group visibility
+     * @param {string} groupId - Group ID
+     */
+    toggleGroupVisibility(groupId) {
+        const layerGroups = this.layerGroups;
+        const group = layerGroups.get(groupId);
+        if (!group) return;
+
+        group.visible = !group.visible;
+        layerGroups.set(groupId, group);
+        this.layerGroups = layerGroups;
+
+        // Toggle all layers in group
+        group.layerIds.forEach(layerId => {
+            const layers = this.layers;
+            const layer = layers.get(layerId);
+            if (layer) {
+                layer.visible = group.visible;
+                layers.set(layerId, layer);
+                this.layers = layers;
+                this.mapManager.toggleLayerVisibility(layerId, layer.visible);
+            }
+        });
+
+        eventBus.emit('group.visibility.changed', { groupId, visible: group.visible });
+    }
+
+    /**
+     * Toggle group expansion
+     * @param {string} groupId - Group ID
+     */
+    toggleGroupExpansion(groupId) {
+        const layerGroups = this.layerGroups;
+        const group = layerGroups.get(groupId);
+        if (!group) return;
+
+        group.expanded = !group.expanded;
+        layerGroups.set(groupId, group);
+        this.layerGroups = layerGroups;
+
+        eventBus.emit('group.expanded', { groupId, expanded: group.expanded });
     }
 
     /**

@@ -1,10 +1,11 @@
 /**
  * Google Maps Manager
  * Handles all Google Maps operations including initialization, rendering, and interactions
+ * Integrated with AppConfig and EventBus
  */
 
 class MapManager {
-    constructor(containerId, apiKey) {
+    constructor(containerId, apiKey = AppConfig.googleMapsApiKey) {
         this.containerId = containerId;
         this.apiKey = apiKey;
         this.map = null;
@@ -16,10 +17,7 @@ class MapManager {
         this.drawingManager = null;
         this.isDrawing = false;
         this.onDrawComplete = null;
-        this.colorPalette = [
-            '#0078d4', '#d13438', '#107c10', '#ffb900', '#8764b8',
-            '#00b7c3', '#f7630c', '#ca5010', '#038387', '#486860'
-        ];
+        this.colorPalette = AppConfig.colors.primary; // Use AppConfig colors
         this.colorIndex = 0;
         this.infoWindow = null;
         this.searchMarker = null;
@@ -38,17 +36,17 @@ class MapManager {
                 }
 
                 this.map = new google.maps.Map(mapElement, {
-                    center: { lat: 37.0902, lng: -95.7129 }, // Center of USA
-                    zoom: 4,
-                    mapTypeControl: true,
+                    center: AppConfig.map.defaultCenter,
+                    zoom: AppConfig.map.defaultZoom,
+                    mapTypeControl: AppConfig.map.mapTypeControl,
                     mapTypeControlOptions: {
                         style: google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
                         position: google.maps.ControlPosition.TOP_LEFT,
                         mapTypeIds: ['roadmap', 'satellite', 'hybrid', 'terrain']
                     },
-                    streetViewControl: true,
-                    fullscreenControl: true,
-                    zoomControl: true,
+                    streetViewControl: AppConfig.map.streetViewControl,
+                    fullscreenControl: AppConfig.map.fullscreenControl,
+                    zoomControl: AppConfig.map.zoomControl,
                     zoomControlOptions: {
                         position: google.maps.ControlPosition.RIGHT_TOP
                     }
@@ -61,9 +59,11 @@ class MapManager {
                 this.setupDrawingTools();
 
                 console.log('Google Map initialized successfully');
+                eventBus.emit('map.initialized', { center: this.map.getCenter(), zoom: this.map.getZoom() });
                 resolve();
             } catch (error) {
                 console.error('Error initializing map:', error);
+                eventBus.emit('map.error', { operation: 'initialize', error });
                 reject(error);
             }
         });
@@ -162,7 +162,7 @@ class MapManager {
             icon: {
                 path: google.maps.SymbolPath.CIRCLE,
                 scale: 4,
-                fillColor: '#FF0000',
+                fillColor: AppConfig.colors.error,
                 fillOpacity: 0.8,
                 strokeColor: '#FFFFFF',
                 strokeWeight: 2
@@ -180,11 +180,11 @@ class MapManager {
             // Create new polygon
             this.currentDrawing = new google.maps.Polygon({
                 paths: this.polygonPath,
-                strokeColor: '#0078d4',
+                strokeColor: AppConfig.colors.primary[0],
                 strokeOpacity: 0.8,
-                strokeWeight: 2,
-                fillColor: '#0078d4',
-                fillOpacity: 0.35,
+                strokeWeight: AppConfig.polygon.strokeWeight,
+                fillColor: AppConfig.colors.primary[0],
+                fillOpacity: AppConfig.polygon.fillOpacity,
                 editable: true,
                 draggable: true,
                 map: this.map
@@ -484,8 +484,8 @@ class MapManager {
         // Hide data layer features so we only see markers (prevents duplicates)
         dataLayer.setStyle({ visible: false });
 
-        // SVG path for teardrop/pin marker
-        const pinPath = 'M 0,0 C -2,-20 -10,-22 -10,-30 A 10,10 0 1,1 10,-30 C 10,-22 2,-20 0,0 z';
+        // Use marker configuration from AppConfig
+        const pinPath = AppConfig.marker.pinPath;
 
         // Get all features from data layer
         dataLayer.forEach((feature) => {
@@ -503,9 +503,9 @@ class MapManager {
                         path: pinPath,
                         fillColor: color,
                         fillOpacity: 0.9,
-                        strokeColor: '#ffffff',
-                        strokeWeight: 1.5,
-                        scale: 0.7, // Smaller size
+                        strokeColor: AppConfig.marker.strokeColor,
+                        strokeWeight: AppConfig.marker.strokeWeight,
+                        scale: AppConfig.marker.scale,
                         anchor: new google.maps.Point(0, 0), // Anchor at bottom point of pin
                         labelOrigin: new google.maps.Point(0, -30)
                     }
@@ -890,11 +890,12 @@ class MapManager {
     }
 
     /**
-     * Reset map view
+     * Reset map view to default center and zoom
      */
     resetView() {
-        this.map.setCenter({ lat: 37.0902, lng: -95.7129 });
-        this.map.setZoom(4);
+        this.map.setCenter(AppConfig.map.defaultCenter);
+        this.map.setZoom(AppConfig.map.defaultZoom);
+        eventBus.emit('map.reset', { center: AppConfig.map.defaultCenter, zoom: AppConfig.map.defaultZoom });
     }
 
     /**

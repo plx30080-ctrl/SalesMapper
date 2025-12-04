@@ -261,8 +261,8 @@ class CSVParser {
             for (let [key, value] of Object.entries(row)) {
                 // Skip if it's already added or empty
                 if (value !== null && value !== undefined && value !== '') {
-                    // Convert key to camelCase
-                    const camelKey = this.toCamelCase(key);
+                    // Convert key to camelCase using Utils
+                    const camelKey = Utils.toCamelCase(key);
                     feature[camelKey] = value;
                 }
             }
@@ -291,23 +291,12 @@ class CSVParser {
         for (let col of possibleIdColumns) {
             const value = row[col] || row[col.toUpperCase()];
             if (value) {
-                return `${col}_${value}`;
+                return Utils.toSafeId(`${col}_${value}`);
             }
         }
 
-        // Fall back to index-based ID
-        return `feature_${index}_${Date.now()}`;
-    }
-
-    /**
-     * Convert string to camelCase
-     * @param {string} str - String to convert
-     * @returns {string} camelCase string
-     */
-    toCamelCase(str) {
-        return str
-            .toLowerCase()
-            .replace(/[^a-zA-Z0-9]+(.)/g, (match, chr) => chr.toUpperCase());
+        // Fall back to Utils.generateId
+        return Utils.generateId('feature');
     }
 
     /**
