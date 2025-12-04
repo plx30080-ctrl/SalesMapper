@@ -106,6 +106,9 @@ async function initializeApp() {
         csvParser = new CSVParser();
         geocodingService = new GeocodingService();
 
+        // Setup map callbacks for feature selection and drawing
+        setupMapCallbacks();
+
         // Store managers in StateManager for access
         stateManager.set('mapManager', mapManager, true);
         stateManager.set('layerManager', layerManager, true);
@@ -192,6 +195,12 @@ function setupEventBusSubscriptions() {
         updateLayerList(layerManager.getAllLayers());
     });
 
+    // Layer reordering event
+    eventBus.on('layer.reordered', ({ layerId, direction }) => {
+        console.log('Layer reordered:', layerId, direction);
+        updateLayerList(layerManager.getAllLayers());
+    });
+
     // Feature events
     eventBus.on('feature.updated', ({ layerId, featureId }) => {
         console.log('Feature updated:', featureId);
@@ -201,7 +210,7 @@ function setupEventBusSubscriptions() {
             const layer = layerManager.getLayer(layerId);
             const feature = layer?.features.find(f => f.id === featureId);
             if (feature) {
-                displayFeatureInfo(feature, layerId);
+                updateFeatureInfo(feature);
             }
         }
     });
@@ -257,6 +266,120 @@ function setupEventBusSubscriptions() {
     });
 
     console.log('EventBus subscriptions setup complete');
+}
+
+/**
+ * Setup map callbacks for feature selection and drawing completion
+ */
+function setupMapCallbacks() {
+    // Handle feature click (when user clicks on a marker or polygon)
+    mapManager.setOnFeatureClick((selectedFeature) => {
+        console.log('Feature clicked:', selectedFeature);
+
+        // Store the selected feature in state
+        stateManager.set('currentEditingFeature', selectedFeature);
+
+        // Update the feature info panel
+        if (selectedFeature && selectedFeature.properties) {
+            updateFeatureInfo(selectedFeature.properties);
+        }
+
+        // Emit event for any listeners
+        eventBus.emit('feature.selected', selectedFeature);
+    });
+
+    // Handle drawing completion (when user finishes drawing a shape)
+    mapManager.setOnDrawComplete((drawnShape) => {
+        console.log('Drawing completed:', drawnShape);
+        handleDrawingComplete(drawnShape);
+    });
+
+    console.log('Map callbacks setup complete');
+}
+
+/**
+ * Handle drawing completion - add drawn shape to layer
+ */
+function handleDrawingComplete(drawnShape) {
+    // Check if we have a target layer for the new feature
+    const targetLayerId = window.targetLayerForNewFeature;
+
+    if (targetLayerId) {
+        // Adding to existing layer
+        const layer = layerManager.getLayer(targetLayerId);
+        if (layer) {
+            const featureId = Utils.generateId('feature');
+            const newFeature = {
+                id: featureId,
+                name: `New ${drawnShape.type}`,
+                description: '',
+                wkt: drawnShape.type === 'Polygon'
+                    ? convertCoordsToWKT(drawnShape.coordinates, 'Polygon')
+                    : convertCoordsToWKT(drawnShape.coordinates, 'Point'),
+                latitude: drawnShape.type === 'Point' ? drawnShape.coordinates[1] : null,
+                longitude: drawnShape.type === 'Point' ? drawnShape.coordinates[0] : null
+            };
+
+            layerManager.addFeaturesToLayer(targetLayerId, [newFeature]);
+            toastManager.success(`Feature added to "${layer.name}"`);
+
+            // Clean up temporary shape from map (it's now part of the layer)
+            if (drawnShape.shape) {
+                drawnShape.shape.setMap(null);
+            }
+        }
+        window.targetLayerForNewFeature = null;
+    } else {
+        // No target layer - prompt user to create a new layer or select one
+        const layerName = prompt('Enter name for new layer:', `New ${drawnShape.type} Layer`);
+        if (layerName) {
+            const type = drawnShape.type === 'Point' ? 'point' : 'polygon';
+            const featureId = Utils.generateId('feature');
+            const newFeature = {
+                id: featureId,
+                name: `New ${drawnShape.type}`,
+                description: '',
+                wkt: drawnShape.type === 'Polygon'
+                    ? convertCoordsToWKT(drawnShape.coordinates, 'Polygon')
+                    : convertCoordsToWKT(drawnShape.coordinates, 'Point'),
+                latitude: drawnShape.type === 'Point' ? drawnShape.coordinates[1] : null,
+                longitude: drawnShape.type === 'Point' ? drawnShape.coordinates[0] : null
+            };
+
+            const layerId = layerManager.createLayer(layerName, [newFeature], type, {
+                source: 'drawn',
+                createdAt: new Date().toISOString()
+            });
+
+            // Add to "All Layers" group
+            addLayerToGroup(layerId, stateManager.get('allLayersGroupId'));
+
+            // Clean up temporary shape from map (it's now part of the layer)
+            if (drawnShape.shape) {
+                drawnShape.shape.setMap(null);
+            }
+
+            toastManager.success(`Layer "${layerName}" created with new ${drawnShape.type.toLowerCase()}`);
+        } else {
+            // User cancelled - remove the temporary shape
+            if (drawnShape.shape) {
+                drawnShape.shape.setMap(null);
+            }
+        }
+    }
+}
+
+/**
+ * Convert coordinates to WKT format
+ */
+function convertCoordsToWKT(coordinates, type) {
+    if (type === 'Point') {
+        return `POINT(${coordinates[0]} ${coordinates[1]})`;
+    } else if (type === 'Polygon') {
+        const ring = coordinates[0].map(coord => `${coord[0]} ${coord[1]}`).join(', ');
+        return `POLYGON((${ring}))`;
+    }
+    return '';
 }
 
 /**
@@ -594,8 +717,14 @@ function selectGroup(groupId) {
  * Toggle group visibility
  */
 function toggleGroupVisibility(groupId, visible) {
-    const group = layerManager.layerGroups.get(groupId);
+    const layerGroups = layerManager.layerGroups;
+    const group = layerGroups.get(groupId);
     if (!group) return;
+
+    // Update group visibility in state
+    group.visible = visible;
+    layerGroups.set(groupId, group);
+    layerManager.layerGroups = layerGroups;
 
     // Get layer IDs based on group type
     let layerIds;
@@ -606,20 +735,21 @@ function toggleGroupVisibility(groupId, visible) {
         layerIds = group.layerIds || [];
     }
 
+    // Update each layer's visibility and persist to state
+    const layers = layerManager.layers;
     layerIds.forEach(layerId => {
-        const layer = layerManager.getLayer(layerId);
+        const layer = layers.get(layerId);
         if (layer) {
-            if (visible) {
-                mapManager.toggleLayerVisibility(layerId, true);
-                layer.visible = true;
-            } else {
-                mapManager.toggleLayerVisibility(layerId, false);
-                layer.visible = false;
-            }
+            layer.visible = visible;
+            layers.set(layerId, layer);
+            mapManager.toggleLayerVisibility(layerId, visible);
         }
     });
+    layerManager.layers = layers;
 
-    layerManager.notifyUpdate();
+    // Update UI without triggering full refresh (avoid layer list filtering issues)
+    updateLayerGroupList();
+    updateLayerList(layerManager.getAllLayers());
 }
 
 /**
@@ -2271,29 +2401,31 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
  * Show move to group dialog
  */
 function showMoveToGroupDialog(layerId) {
-    const groupNames = [];
-    layerManager.getAllLayerGroups().forEach(g => groupNames.push(g.name));
+    const groups = layerManager.getAllLayerGroups();
+    const groupNames = groups.map(g => g.name);
 
     const groupName = prompt('Move to group:\n' + groupNames.join('\n') + '\n\nEnter group name:');
     if (!groupName) return;
 
-    let targetGroupId = null;
-    layerManager.getAllLayerGroups().forEach((g, id) => {
-        if (g.name === groupName) targetGroupId = id;
-    });
+    // Find group by name and get its ID
+    const targetGroup = groups.find(g => g.name === groupName);
 
-    if (!targetGroupId) {
+    if (!targetGroup) {
         toastManager.error('Group not found');
         return;
     }
 
-    // Remove from all groups
+    // Remove from all groups first
     removeLayerFromAllGroups(layerId);
 
-    // Add to target group
-    addLayerToGroup(layerId, targetGroupId);
+    // Add to target group using the actual group ID
+    addLayerToGroup(layerId, targetGroup.id);
 
-    toastManager.success('Layer moved to group');
+    // Update UI
+    updateLayerGroupList();
+    updateLayerList(layerManager.getAllLayers());
+
+    toastManager.success(`Layer moved to "${groupName}"`);
 }
 
 /**
@@ -2446,9 +2578,10 @@ function updateFeatureInfo(properties) {
  * Handle deleting a feature from the info panel
  */
 function handleDeleteFeatureFromInfo() {
+    const currentEditingFeature = stateManager.get('currentEditingFeature');
     if (!currentEditingFeature) return;
 
-    const featureName = currentEditingFeature.name || 'this feature';
+    const featureName = currentEditingFeature.properties?.name || 'this feature';
     if (!confirm(`Delete ${featureName}?`)) {
         return;
     }
@@ -2470,6 +2603,7 @@ function handleDeleteFeatureFromInfo() {
  * Open edit modal
  */
 function openEditModal() {
+    const currentEditingFeature = stateManager.get('currentEditingFeature');
     if (!currentEditingFeature) {
         toastManager.warning('No feature selected');
         return;
@@ -2478,7 +2612,7 @@ function openEditModal() {
     const formFields = document.getElementById('editFormFields');
     formFields.innerHTML = '';
 
-    const properties = currentEditingFeature.properties;
+    const properties = currentEditingFeature.properties || {};
 
     // Helper function to create form field
     const createFormField = (key, value = '') => {
@@ -2532,6 +2666,7 @@ function openEditModal() {
 function handleEditFormSubmit(e) {
     e.preventDefault();
 
+    const currentEditingFeature = stateManager.get('currentEditingFeature');
     if (!currentEditingFeature) return;
 
     const formData = new FormData(e.target);
@@ -2541,13 +2676,23 @@ function handleEditFormSubmit(e) {
         updatedProperties[key] = value;
     }
 
+    // Get the feature ID from properties or the feature itself
+    const featureId = currentEditingFeature.properties?.id || currentEditingFeature.id;
+
     layerManager.updateFeature(
         currentEditingFeature.layerId,
-        currentEditingFeature.properties.id,
+        featureId,
         updatedProperties
     );
 
-    updateFeatureInfo({ ...currentEditingFeature.properties, ...updatedProperties });
+    // Update the stored feature with new properties
+    const updatedFeature = {
+        ...currentEditingFeature,
+        properties: { ...currentEditingFeature.properties, ...updatedProperties }
+    };
+    stateManager.set('currentEditingFeature', updatedFeature);
+
+    updateFeatureInfo(updatedFeature.properties);
 
     modalManager.close('editModal');
     toastManager.success('Feature updated');
@@ -2557,12 +2702,15 @@ function handleEditFormSubmit(e) {
  * Handle delete feature
  */
 function handleDeleteFeature() {
+    const currentEditingFeature = stateManager.get('currentEditingFeature');
     if (!currentEditingFeature) return;
 
     if (confirm('Delete this feature?')) {
+        const featureId = currentEditingFeature.properties?.id || currentEditingFeature.id;
+
         layerManager.deleteFeature(
             currentEditingFeature.layerId,
-            currentEditingFeature.properties.id
+            featureId
         );
 
         modalManager.close('editModal');
