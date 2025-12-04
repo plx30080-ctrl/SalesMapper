@@ -156,9 +156,9 @@ function initializePluginSystem() {
             console.log('Example plugin registered');
         }
 
-        // Initialize external API with required context
-        const externalAPI = getExternalAPI();
-        console.log('External API initialized and available via window.SalesMapperAPI');
+        // External API is already initialized in plugin-api.js
+        // and available via window.SalesMapperAPI
+        console.log('External API available via window.SalesMapperAPI');
     } catch (error) {
         console.error('Error initializing plugin system:', error);
     }
