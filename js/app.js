@@ -2482,9 +2482,34 @@ function showToast(message, type = 'info', duration = 3000) {
     console.log(`[${type.toUpperCase()}] ${message}`);
 }
 
-// Initialize app when DOM is ready
+// Wait for both DOM and Google Maps to be ready
+let domReady = false;
+let mapsReady = false;
+
+function tryInitialize() {
+    if (domReady && mapsReady) {
+        initializeApp();
+    }
+}
+
+// Handle DOM ready
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeApp);
+    document.addEventListener('DOMContentLoaded', () => {
+        domReady = true;
+        tryInitialize();
+    });
 } else {
-    initializeApp();
+    domReady = true;
+}
+
+// Handle Google Maps ready (callback for async loading)
+window.initMap = function() {
+    mapsReady = true;
+    tryInitialize();
+};
+
+// Fallback: If Google Maps is already loaded (non-async scenario)
+if (typeof google !== 'undefined' && google.maps) {
+    mapsReady = true;
+    tryInitialize();
 }
