@@ -243,8 +243,7 @@ body {
 
 .layer-item {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
     padding: 0.5rem;
     background-color: var(--bg-secondary);
     border: 1px solid var(--border-color);

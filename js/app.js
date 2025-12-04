@@ -170,6 +170,11 @@ async function initializeApp() {
  */
 function setupMapClickHandler() {
     google.maps.event.addListener(mapManager.map, 'click', (e) => {
+        // Don't clear selection if in drawing mode
+        if (mapManager.drawingMode) {
+            return;
+        }
+
         // For Google Maps, we clear selection on map click
         // Feature clicks are handled separately in the data layer
         mapManager.clearSelectedFeature();
