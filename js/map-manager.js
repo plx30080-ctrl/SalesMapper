@@ -74,23 +74,157 @@ class MapManager {
      */
     setupDrawingTools() {
         // Drawing library is deprecated as of August 2025
-        // For now, we'll use a simple polygon drawing implementation
+        // Using custom implementation with event handlers
         this.drawingMode = null;
         this.currentDrawing = null;
         this.drawnShapes = [];
+        this.polygonPath = [];
+        this.tempMarkers = [];
+
+        // Add map click listener for drawing
+        this.mapClickListener = null;
 
         console.log('Drawing tools initialized (custom implementation)');
     }
 
     /**
      * Enable drawing mode
-     * @param {string} mode - Drawing mode ('point', 'polygon', etc.)
+     * @param {string} mode - Drawing mode ('draw-point', 'draw-polygon', etc.)
      */
     startDrawing(mode) {
         this.drawingMode = mode;
-        console.log(`Drawing mode enabled: ${mode}`);
-        // Simple implementation - user can click on map to add points/polygons
-        // Full implementation would require custom UI and event handlers
+
+        // Remove existing click listener if any
+        if (this.mapClickListener) {
+            google.maps.event.removeListener(this.mapClickListener);
+        }
+
+        // Add appropriate click listener based on mode
+        if (mode === 'draw-point') {
+            this.mapClickListener = this.map.addListener('click', (e) => {
+                this.handlePointClick(e.latLng);
+            });
+            console.log('Point drawing mode enabled - Click on map to add point');
+        } else if (mode === 'draw-polygon') {
+            this.polygonPath = [];
+            this.tempMarkers = [];
+            this.mapClickListener = this.map.addListener('click', (e) => {
+                this.handlePolygonClick(e.latLng);
+            });
+            console.log('Polygon drawing mode enabled - Click to add vertices, double-click to finish');
+        }
+    }
+
+    /**
+     * Handle point drawing click
+     */
+    handlePointClick(latLng) {
+        // Create a marker at the clicked location
+        const marker = new google.maps.Marker({
+            position: latLng,
+            map: this.map,
+            draggable: true,
+            title: 'New Point'
+        });
+
+        this.currentDrawing = marker;
+        this.drawnShapes.push(marker);
+
+        // Trigger draw complete callback
+        if (this.onDrawComplete) {
+            this.onDrawComplete({
+                type: 'Point',
+                coordinates: [latLng.lng(), latLng.lat()],
+                shape: marker
+            });
+        }
+
+        // Stop drawing mode after adding point
+        this.stopDrawing();
+    }
+
+    /**
+     * Handle polygon drawing click
+     */
+    handlePolygonClick(latLng) {
+        // Add vertex to path
+        this.polygonPath.push(latLng);
+
+        // Add temporary marker for vertex
+        const vertexMarker = new google.maps.Marker({
+            position: latLng,
+            map: this.map,
+            icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 4,
+                fillColor: '#FF0000',
+                fillOpacity: 0.8,
+                strokeColor: '#FFFFFF',
+                strokeWeight: 2
+            }
+        });
+        this.tempMarkers.push(vertexMarker);
+
+        // If we have at least 2 points, draw/update the polygon
+        if (this.polygonPath.length >= 2) {
+            // Remove old polygon if exists
+            if (this.currentDrawing && this.currentDrawing instanceof google.maps.Polygon) {
+                this.currentDrawing.setMap(null);
+            }
+
+            // Create new polygon
+            this.currentDrawing = new google.maps.Polygon({
+                paths: this.polygonPath,
+                strokeColor: '#0078d4',
+                strokeOpacity: 0.8,
+                strokeWeight: 2,
+                fillColor: '#0078d4',
+                fillOpacity: 0.35,
+                editable: true,
+                draggable: true,
+                map: this.map
+            });
+
+            // Add double-click listener to finish drawing
+            google.maps.event.addListenerOnce(this.currentDrawing, 'dblclick', () => {
+                this.finishPolygonDrawing();
+            });
+        }
+    }
+
+    /**
+     * Finish polygon drawing
+     */
+    finishPolygonDrawing() {
+        if (this.currentDrawing && this.polygonPath.length >= 3) {
+            // Remove temporary vertex markers
+            this.tempMarkers.forEach(marker => marker.setMap(null));
+            this.tempMarkers = [];
+
+            // Make polygon non-editable
+            this.currentDrawing.setOptions({
+                editable: false,
+                draggable: false
+            });
+
+            this.drawnShapes.push(this.currentDrawing);
+
+            // Convert path to coordinates array
+            const coordinates = this.polygonPath.map(latLng => [latLng.lng(), latLng.lat()]);
+            coordinates.push(coordinates[0]); // Close the polygon
+
+            // Trigger draw complete callback
+            if (this.onDrawComplete) {
+                this.onDrawComplete({
+                    type: 'Polygon',
+                    coordinates: [coordinates],
+                    shape: this.currentDrawing
+                });
+            }
+
+            // Stop drawing mode
+            this.stopDrawing();
+        }
     }
 
     /**
@@ -98,6 +232,20 @@ class MapManager {
      */
     stopDrawing() {
         this.drawingMode = null;
+        this.polygonPath = [];
+
+        // Remove map click listener
+        if (this.mapClickListener) {
+            google.maps.event.removeListener(this.mapClickListener);
+            this.mapClickListener = null;
+        }
+
+        // Clean up temporary markers
+        if (this.tempMarkers) {
+            this.tempMarkers.forEach(marker => marker.setMap(null));
+            this.tempMarkers = [];
+        }
+
         console.log('Drawing mode disabled');
     }
 
@@ -372,10 +520,13 @@ class MapManager {
      */
     handleMarkerClick(marker, layerId) {
         const feature = marker.feature;
+        const properties = this.featurePropertiesToObject(feature);
+
         this.selectedFeature = {
             feature: feature,
             layerId: layerId,
-            properties: this.featurePropertiesToObject(feature)
+            id: feature.getId() || properties.id,
+            properties: properties
         };
 
         // Call callback if provided

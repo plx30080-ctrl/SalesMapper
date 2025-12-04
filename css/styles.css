@@ -325,6 +325,104 @@ body {
     cursor: not-allowed;
 }
 
+/* Layer Header with Expand Button */
+.layer-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.layer-expand-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.25rem;
+    font-size: 0.85rem;
+    line-height: 1;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+    flex-shrink: 0;
+    width: 20px;
+    text-align: center;
+}
+
+.layer-expand-btn:hover {
+    color: var(--primary-color);
+}
+
+/* Features List Container */
+.layer-features-list {
+    margin-top: 0.5rem;
+    padding-left: 1.5rem;
+    border-left: 2px solid var(--border-color);
+    margin-left: 0.5rem;
+}
+
+/* Individual Feature Item */
+.feature-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.5rem;
+    background-color: var(--bg-primary);
+    border-radius: 3px;
+    margin-bottom: 0.25rem;
+    transition: all 0.2s;
+}
+
+.feature-item:hover {
+    background-color: var(--bg-secondary);
+}
+
+.feature-item:last-child {
+    margin-bottom: 0;
+}
+
+.feature-checkbox {
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.feature-name {
+    flex: 1;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+
+.feature-name:hover {
+    color: var(--primary-color);
+}
+
+.feature-edit-btn,
+.feature-delete-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.2rem 0.3rem;
+    font-size: 0.9rem;
+    line-height: 1;
+    transition: all 0.2s;
+    opacity: 0.6;
+    flex-shrink: 0;
+}
+
+.feature-edit-btn:hover {
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+.feature-delete-btn:hover {
+    opacity: 1;
+    transform: scale(1.1);
+}
+
 .layer-opacity-control {
     display: none;  /* Opacity moved to settings menu */
 }
