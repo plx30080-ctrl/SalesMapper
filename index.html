@@ -389,7 +389,10 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 
     <!-- Google Maps JavaScript API -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCUdAbY7osfgatmss5tCYOgybqE1mzEwzA&libraries=places,drawing,marker&v=weekly"></script>
+    <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCUdAbY7osfgatmss5tCYOgybqE1mzEwzA&libraries=places,marker&v=weekly&callback=initMap"></script>
+
+    <!-- MarkerClusterer for point clustering -->
+    <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 
     <!-- PapaParse for CSV parsing -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
