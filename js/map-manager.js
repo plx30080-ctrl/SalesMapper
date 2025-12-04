@@ -780,6 +780,56 @@ class MapManager {
     }
 
     /**
+     * Reorder layers on the map to respect the provided ordering
+     * (last item appears on top). Uses Google Maps primitives instead of the
+     * removed Azure Maps layer APIs.
+     * @param {Array<string>} orderedLayerIds - Layer IDs in back-to-front order
+     */
+    reorderLayers(orderedLayerIds) {
+        if (!Array.isArray(orderedLayerIds)) return;
+
+        orderedLayerIds.forEach((layerId, index) => {
+            const layer = this.layers.get(layerId);
+            if (!layer) return;
+
+            // Bring polygon data layers to the front by detaching and reattaching
+            if (layer.dataLayer && layer.type === 'polygon') {
+                layer.dataLayer.setMap(null);
+                layer.dataLayer.setMap(this.map);
+
+                // Ensure a consistent z-index for polygon styles without overriding
+                // any existing data-driven styling callbacks.
+                const currentStyle = layer.dataLayer.getStyle() || {};
+                const zIndex = index + 1;
+                if (typeof currentStyle === 'function') {
+                    layer.dataLayer.setStyle((feature) => ({
+                        ...(currentStyle(feature) || {}),
+                        zIndex
+                    }));
+                } else {
+                    layer.dataLayer.setStyle({ ...(currentStyle || {}), zIndex });
+                }
+            }
+
+            // For point layers, update markers/clusterers to respect order
+            if (layer.markers) {
+                const zIndex = index + 1;
+                layer.markers.forEach(marker => {
+                    marker.setZIndex(zIndex);
+                    marker.setMap(null);
+                    marker.setMap(this.map);
+                });
+            }
+
+            if (layer.clusterer) {
+                // Reattach clusterer to force redraw ordering
+                layer.clusterer.setMap(null);
+                layer.clusterer.setMap(this.map);
+            }
+        });
+    }
+
+    /**
      * Get next color from palette
      * @returns {string} Color hex code
      */

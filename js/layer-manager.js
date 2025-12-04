@@ -174,37 +174,9 @@ class LayerManager {
         // (last added layer appears on top)
         const reversedOrder = [...this.layerOrder].reverse();
 
-        reversedOrder.forEach(layerId => {
-            const mapLayers = this.mapManager.layers.get(layerId);
-            if (mapLayers) {
-                // Remove and re-add layers to move them to the top
-                // Add in order: polygon, line, bubble (clusters), clusterLabel, individualBubble, symbol (markers)
-                if (mapLayers.polygon) {
-                    this.mapManager.map.layers.remove(mapLayers.polygon);
-                    this.mapManager.map.layers.add(mapLayers.polygon);
-                }
-                if (mapLayers.line) {
-                    this.mapManager.map.layers.remove(mapLayers.line);
-                    this.mapManager.map.layers.add(mapLayers.line);
-                }
-                if (mapLayers.bubble) {
-                    this.mapManager.map.layers.remove(mapLayers.bubble);
-                    this.mapManager.map.layers.add(mapLayers.bubble);
-                }
-                if (mapLayers.clusterLabel) {
-                    this.mapManager.map.layers.remove(mapLayers.clusterLabel);
-                    this.mapManager.map.layers.add(mapLayers.clusterLabel);
-                }
-                if (mapLayers.individualBubble) {
-                    this.mapManager.map.layers.remove(mapLayers.individualBubble);
-                    this.mapManager.map.layers.add(mapLayers.individualBubble);
-                }
-                if (mapLayers.symbol) {
-                    this.mapManager.map.layers.remove(mapLayers.symbol);
-                    this.mapManager.map.layers.add(mapLayers.symbol);
-                }
-            }
-        });
+        // Delegate ordering to the map manager so it can use the correct
+        // Google Maps APIs (the old Azure Maps calls are no longer valid).
+        this.mapManager.reorderLayers(reversedOrder);
     }
 
     /**
