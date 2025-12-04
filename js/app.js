@@ -128,11 +128,12 @@ async function initializeApp() {
         // Try to load saved state from localStorage
         const loaded = loadFromLocalStorage();
 
-        // Create default "All Layers" group if needed
-        if (!loaded) {
-            const allLayersGroup = layerManager.createLayerGroup('All Layers', { isDefault: true });
-            stateManager.set('allLayersGroupId', allLayersGroup, true);
-        }
+        // Ensure default "All Layers" group exists (create if not loaded or missing)
+        ensureDefaultLayerGroup();
+
+        // Initialize UI after state is ready
+        updateLayerGroupList();
+        updateLayerList(layerManager.getAllLayers());
 
         console.log('Application initialized successfully');
         loadingManager.hide();
@@ -171,22 +172,24 @@ function setupEventBusSubscriptions() {
     // Layer events
     eventBus.on('layer.created', ({ layerId, layer }) => {
         console.log('Layer created:', layerId);
-        updateLayerList();
+        updateLayerList(layerManager.getAllLayers());
+        updateLayerGroupList();
     });
 
     eventBus.on('layer.deleted', ({ layerId }) => {
         console.log('Layer deleted:', layerId);
-        updateLayerList();
+        updateLayerList(layerManager.getAllLayers());
+        updateLayerGroupList();
     });
 
     eventBus.on('layer.visibility.changed', ({ layerId, visible }) => {
         console.log('Layer visibility changed:', layerId, visible);
-        updateLayerList();
+        updateLayerList(layerManager.getAllLayers());
     });
 
     eventBus.on('features.added', ({ layerId, count }) => {
         console.log('Features added to layer:', layerId, count);
-        updateLayerList();
+        updateLayerList(layerManager.getAllLayers());
     });
 
     // Feature events
@@ -227,7 +230,21 @@ function setupEventBusSubscriptions() {
 
     eventBus.on('group.visibility.changed', ({ groupId, visible }) => {
         console.log('Group visibility changed:', groupId, visible);
-        updateLayerList();
+        updateLayerList(layerManager.getAllLayers());
+    });
+
+    // Layer update notification event
+    eventBus.on('layers.updated', ({ layerCount, groupCount }) => {
+        console.log('Layers updated:', layerCount, 'layers,', groupCount, 'groups');
+        updateLayerList(layerManager.getAllLayers());
+        updateLayerGroupList();
+    });
+
+    // Layers imported event (from localStorage or file)
+    eventBus.on('layers.imported', ({ count }) => {
+        console.log('Layers imported:', count);
+        updateLayerList(layerManager.getAllLayers());
+        updateLayerGroupList();
     });
 
     // Map events
@@ -425,8 +442,9 @@ function handleCreateBlankLayer() {
     addLayerToGroup(layerId, stateManager.get('allLayersGroupId'));
 
     // Also add to active group if one is selected (and it's not "All Layers")
-    if (stateManager.get('activeGroup') && stateManager.get('activeGroup') !== stateManager.get('allLayersGroupId')) {
-        addLayerToGroup(layerId, activeGroup);
+    const currentActiveGroup = stateManager.get('activeGroup');
+    if (currentActiveGroup && currentActiveGroup !== stateManager.get('allLayersGroupId')) {
+        addLayerToGroup(layerId, currentActiveGroup);
     }
 
     toastManager.success(`Blank ${layerType} layer "${layerName}" created. Use the layer menu to add features.`);
@@ -452,6 +470,39 @@ function createLayerGroup(name) {
 
     // EventBus will trigger updateLayerGroupList via subscription
     return groupId;
+}
+
+/**
+ * Ensure the default "All Layers" group exists
+ * Called during initialization to guarantee the group is available
+ */
+function ensureDefaultLayerGroup() {
+    let allLayersGroupId = stateManager.get('allLayersGroupId');
+
+    // Check if the group ID is set and the group actually exists
+    if (allLayersGroupId) {
+        const existingGroup = layerManager.getLayerGroup(allLayersGroupId);
+        if (existingGroup) {
+            console.log('Default "All Layers" group found:', allLayersGroupId);
+            return allLayersGroupId;
+        }
+        // Group ID exists but group doesn't - need to create it
+        console.log('Default group ID found but group missing, recreating...');
+    }
+
+    // Create the default "All Layers" group
+    console.log('Creating default "All Layers" group...');
+    allLayersGroupId = layerManager.createLayerGroup('All Layers', { isDefault: true });
+    stateManager.set('allLayersGroupId', allLayersGroupId, true);
+
+    // Add all existing layers to this group
+    const allLayers = layerManager.getAllLayers();
+    allLayers.forEach(layer => {
+        layerManager.addLayerToGroup(layer.id, allLayersGroupId);
+    });
+
+    console.log('Default "All Layers" group created:', allLayersGroupId);
+    return allLayersGroupId;
 }
 
 /**
@@ -854,8 +905,9 @@ async function handleCSVUpload() {
             addLayerToGroup(layerId, stateManager.get('allLayersGroupId'));
 
             // Also add to active group if one is selected (and it's not "All Layers")
-            if (stateManager.get('activeGroup') && stateManager.get('activeGroup') !== stateManager.get('allLayersGroupId')) {
-                addLayerToGroup(layerId, activeGroup);
+            const uploadActiveGroup = stateManager.get('activeGroup');
+            if (uploadActiveGroup && uploadActiveGroup !== stateManager.get('allLayersGroupId')) {
+                addLayerToGroup(layerId, uploadActiveGroup);
             }
 
             successCount++;
@@ -1004,8 +1056,9 @@ async function handlePasteImport() {
         addLayerToGroup(layerId, stateManager.get('allLayersGroupId'));
 
         // Also add to active group if one is selected (and it's not "All Layers")
-        if (stateManager.get('activeGroup') && stateManager.get('activeGroup') !== stateManager.get('allLayersGroupId')) {
-            addLayerToGroup(layerId, activeGroup);
+        const pasteActiveGroup = stateManager.get('activeGroup');
+        if (pasteActiveGroup && pasteActiveGroup !== stateManager.get('allLayersGroupId')) {
+            addLayerToGroup(layerId, pasteActiveGroup);
         }
 
         loadingManager.hide();
@@ -1314,8 +1367,9 @@ async function handleColumnMapSubmit(e) {
         addLayerToGroup(layerId, stateManager.get('allLayersGroupId'));
 
         // Also add to active group if one is selected (and it's not "All Layers")
-        if (stateManager.get('activeGroup') && stateManager.get('activeGroup') !== stateManager.get('allLayersGroupId')) {
-            addLayerToGroup(layerId, activeGroup);
+        const geocodeActiveGroup = stateManager.get('activeGroup');
+        if (geocodeActiveGroup && geocodeActiveGroup !== stateManager.get('allLayersGroupId')) {
+            addLayerToGroup(layerId, geocodeActiveGroup);
         }
 
         toastManager.success(`Layer "${layerName}" created with ${validFeatures.length} geocoded locations`);
@@ -1517,10 +1571,16 @@ function updateLayerList(layers) {
     const layerList = document.getElementById('layerList');
     layerList.innerHTML = '';
 
+    // Ensure layers is defined
+    if (!layers) {
+        layers = layerManager.getAllLayers();
+    }
+
     // Filter layers by active group
     let displayLayers = layers;
-    if (activeGroup) {
-        const group = layerManager.layerGroups.get(activeGroup);
+    const currentActiveGroup = stateManager.get('activeGroup');
+    if (currentActiveGroup) {
+        const group = layerManager.layerGroups.get(currentActiveGroup);
         if (group) {
             displayLayers = layers.filter(l => (group.layerIds || []).includes(l.id));
         }
