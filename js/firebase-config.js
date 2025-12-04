@@ -1,21 +1,11 @@
 /**
  * Firebase Configuration and Database Manager
  * Handles all Firebase Realtime Database operations
+ * Integrated with AppConfig and Utils
  */
 
-// Firebase configuration
-const firebaseConfig = {
-    apiKey: "AIzaSyCmGwFI88fAzx3zddzqyYguS4OAGOmprME",
-    authDomain: "ebsalesmapping.firebaseapp.com",
-    projectId: "ebsalesmapping",
-    storageBucket: "ebsalesmapping.firebasestorage.app",
-    messagingSenderId: "623364027452",
-    appId: "1:623364027452:web:b152a2c17ae2b5b5d7ff39",
-    measurementId: "G-9X2LB8LH84"
-};
-
-// Initialize Firebase
-firebase.initializeApp(firebaseConfig);
+// Initialize Firebase using AppConfig
+firebase.initializeApp(AppConfig.firebase);
 const database = firebase.database();
 
 /**
@@ -35,18 +25,20 @@ class FirebaseManager {
      */
     async saveAllLayers(layersData) {
         try {
-            const timestamp = new Date().toISOString();
+            const timestamp = Utils.formatDate();
             const dataToSave = {
                 layers: layersData,
                 lastUpdated: timestamp,
-                version: '1.0'
+                version: '2.0'
             };
 
             await this.dataRef.set(dataToSave);
             console.log('Data saved to Firebase successfully');
+            eventBus.emit('firebase.saved', { timestamp });
             return { success: true, timestamp };
         } catch (error) {
             console.error('Error saving to Firebase:', error);
+            eventBus.emit('firebase.error', { operation: 'save', error });
             throw error;
         }
     }
@@ -62,6 +54,7 @@ class FirebaseManager {
 
             if (data && data.layers) {
                 console.log('Data loaded from Firebase successfully');
+                eventBus.emit('firebase.loaded', { layerCount: Object.keys(data.layers).length });
                 return {
                     success: true,
                     layers: data.layers,
@@ -73,6 +66,7 @@ class FirebaseManager {
             }
         } catch (error) {
             console.error('Error loading from Firebase:', error);
+            eventBus.emit('firebase.error', { operation: 'load', error });
             throw error;
         }
     }
@@ -85,7 +79,7 @@ class FirebaseManager {
      */
     async saveLayer(layerId, layerData) {
         try {
-            const timestamp = new Date().toISOString();
+            const timestamp = Utils.formatDate();
             const dataToSave = {
                 ...layerData,
                 lastUpdated: timestamp
@@ -125,7 +119,7 @@ class FirebaseManager {
      */
     async updateFeature(layerId, featureId, featureData) {
         try {
-            const timestamp = new Date().toISOString();
+            const timestamp = Utils.formatDate();
             await this.layersRef.child(layerId).child('features').child(featureId).update({
                 ...featureData,
                 lastUpdated: timestamp

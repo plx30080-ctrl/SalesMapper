@@ -1,13 +1,15 @@
 /**
  * Geocoding Service
  * Handles address geocoding using Google Maps Geocoding API
+ * Integrated with AppConfig and Utils
  */
 
 class GeocodingService {
-    constructor(apiKey) {
+    constructor(apiKey = AppConfig.googleMapsApiKey) {
         this.apiKey = apiKey;
         this.geocodingUrl = 'https://maps.googleapis.com/maps/api/geocode/json';
-        this.delayMs = 200; // Delay between requests to respect rate limits
+        this.delayMs = AppConfig.geocoding.delayMs;
+        this.confidenceScores = AppConfig.geocoding.confidenceScores;
     }
 
     /**
@@ -52,25 +54,17 @@ class GeocodingService {
                 const result = data.results[0];
                 const location = result.geometry.location;
 
-                // Calculate confidence score based on location_type
-                // ROOFTOP = 1.0, RANGE_INTERPOLATED = 0.8, GEOMETRIC_CENTER = 0.6, APPROXIMATE = 0.4
-                let confidence = 0.5;
-                if (result.geometry.location_type === 'ROOFTOP') {
-                    confidence = 1.0;
-                } else if (result.geometry.location_type === 'RANGE_INTERPOLATED') {
-                    confidence = 0.8;
-                } else if (result.geometry.location_type === 'GEOMETRIC_CENTER') {
-                    confidence = 0.6;
-                } else if (result.geometry.location_type === 'APPROXIMATE') {
-                    confidence = 0.4;
-                }
+                // Calculate confidence score from config based on location_type
+                const locationType = result.geometry.location_type;
+                const confidence = this.confidenceScores[locationType] || this.confidenceScores.default;
 
                 return {
                     success: true,
                     latitude: location.lat,
                     longitude: location.lng,
                     confidence: confidence,
-                    formattedAddress: result.formatted_address || address
+                    formattedAddress: result.formatted_address || address,
+                    locationType: locationType
                 };
             }
 
@@ -141,12 +135,13 @@ class GeocodingService {
 
             // Create feature object
             const feature = {
-                id: `feature_${i}_${Date.now()}`,
+                id: Utils.generateId('feature'),
                 ...row, // Include all original columns
                 originalAddress: address,
                 latitude: geocoded.latitude,
                 longitude: geocoded.longitude,
                 geocodeConfidence: geocoded.confidence,
+                geocodeLocationType: geocoded.locationType,
                 geocodeStatus: geocoded.success ? 'Success' : geocoded.error
             };
 
