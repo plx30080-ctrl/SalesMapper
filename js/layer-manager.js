@@ -785,4 +785,15 @@ class LayerManager {
             hasSort: this.activeSorts.has(layerId)
         };
     }
+
+    /**
+     * Notify that layers have been updated
+     * Emits event to trigger UI refresh
+     */
+    notifyUpdate() {
+        eventBus.emit('layers.updated', {
+            layerCount: this.layers.size,
+            groupCount: this.layerGroups.size
+        });
+    }
 }
