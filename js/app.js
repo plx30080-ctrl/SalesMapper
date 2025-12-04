@@ -1806,6 +1806,12 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
             // For points, create markers with appropriate colors
             const markers = [];
 
+            // Hide data layer features so we only see markers (prevents duplicates)
+            dataLayer.setStyle({ visible: false });
+
+            // SVG path for teardrop/pin marker
+            const pinPath = 'M 0,0 C -2,-20 -10,-22 -10,-30 A 10,10 0 1,1 10,-30 C 10,-22 2,-20 0,0 z';
+
             dataLayer.forEach((feature) => {
                 const geometry = feature.getGeometry();
                 if (geometry.getType() === 'Point') {
@@ -1813,17 +1819,21 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
                     const propValue = feature.getProperty(actualPropertyName);
                     const color = colorMap[propValue] || '#cccccc';
 
+                    // Create marker with teardrop icon
+                    // Don't set map yet if clustering - let clusterer handle it
                     const marker = new google.maps.Marker({
                         position: { lat: position.lat(), lng: position.lng() },
-                        map: mapManager.map,
+                        map: enableClustering ? null : mapManager.map, // Only set map if NOT clustering
                         title: feature.getProperty('name') || '',
                         icon: {
-                            path: google.maps.SymbolPath.CIRCLE,
+                            path: pinPath,
                             fillColor: color,
-                            fillOpacity: 1,
+                            fillOpacity: 0.9,
                             strokeColor: '#ffffff',
-                            strokeWeight: 2,
-                            scale: 8
+                            strokeWeight: 1.5,
+                            scale: 0.7, // Smaller size
+                            anchor: new google.maps.Point(0, 0), // Anchor at bottom point of pin
+                            labelOrigin: new google.maps.Point(0, -30)
                         }
                     });
 
@@ -1846,10 +1856,28 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
             }
             mapManager.markers.get(layerId).push(...markers);
 
+            // Setup clustering if enabled and MarkerClusterer is available
+            let clusterer = null;
+            if (enableClustering && markers.length > 0) {
+                // Check if MarkerClusterer is available in global scope
+                if (typeof markerClusterer !== 'undefined' && markerClusterer.MarkerClusterer) {
+                    clusterer = new markerClusterer.MarkerClusterer({
+                        map: mapManager.map,
+                        markers: markers
+                    });
+                    console.log(`MarkerClusterer initialized for ${layerId} with ${markers.length} markers`);
+                } else {
+                    console.warn(`Clustering requested for ${layerId} but MarkerClusterer library not loaded yet`);
+                    // Fallback: add markers to map manually
+                    markers.forEach(m => m.setMap(mapManager.map));
+                }
+            }
+
             // Store layer reference
             mapManager.layers.set(layerId, {
                 dataLayer: dataLayer,
                 markers: markers,
+                clusterer: clusterer,
                 type: 'point',
                 color: 'data-driven'
             });

@@ -289,25 +289,33 @@ class MapManager {
         const markers = [];
         const dataLayer = dataSource.dataLayer;
 
+        // Hide data layer features so we only see markers (prevents duplicates)
+        dataLayer.setStyle({ visible: false });
+
+        // SVG path for teardrop/pin marker
+        const pinPath = 'M 0,0 C -2,-20 -10,-22 -10,-30 A 10,10 0 1,1 10,-30 C 10,-22 2,-20 0,0 z';
+
         // Get all features from data layer
         dataLayer.forEach((feature) => {
             const geometry = feature.getGeometry();
             if (geometry.getType() === 'Point') {
                 const position = geometry.get();
 
-                // Use standard Marker for compatibility (AdvancedMarker requires more setup)
-                // We'll suppress the deprecation warning in production
+                // Create marker with teardrop icon
+                // Don't set map yet if clustering - let clusterer handle it
                 const marker = new google.maps.Marker({
                     position: { lat: position.lat(), lng: position.lng() },
-                    map: this.map,
+                    map: dataSource.enableClustering ? null : this.map, // Only set map if NOT clustering
                     title: feature.getProperty('name') || '',
                     icon: {
-                        path: google.maps.SymbolPath.CIRCLE,
+                        path: pinPath,
                         fillColor: color,
-                        fillOpacity: 1,
+                        fillOpacity: 0.9,
                         strokeColor: '#ffffff',
-                        strokeWeight: 2,
-                        scale: 8
+                        strokeWeight: 1.5,
+                        scale: 0.7, // Smaller size
+                        anchor: new google.maps.Point(0, 0), // Anchor at bottom point of pin
+                        labelOrigin: new google.maps.Point(0, -30)
                     }
                 });
 
@@ -333,6 +341,7 @@ class MapManager {
         // Setup clustering if enabled and MarkerClusterer is available
         let clusterer = null;
         if (dataSource.enableClustering && markers.length > 0) {
+            // Check if MarkerClusterer is available in global scope
             if (typeof markerClusterer !== 'undefined' && markerClusterer.MarkerClusterer) {
                 clusterer = new markerClusterer.MarkerClusterer({
                     map: this.map,
@@ -340,7 +349,9 @@ class MapManager {
                 });
                 console.log(`MarkerClusterer initialized for ${layerId} with ${markers.length} markers`);
             } else {
-                console.log(`Clustering requested for ${layerId} but MarkerClusterer library not loaded yet`);
+                console.warn(`Clustering requested for ${layerId} but MarkerClusterer library not loaded yet`);
+                // Fallback: add markers to map manually
+                markers.forEach(m => m.setMap(this.map));
             }
         }
 
@@ -494,13 +505,20 @@ class MapManager {
         const layer = this.layers.get(layerId);
         if (!layer) return;
 
-        // Toggle data layer visibility
-        if (layer.dataLayer) {
+        // Toggle data layer visibility (polygons use this)
+        if (layer.dataLayer && layer.type === 'polygon') {
             layer.dataLayer.setMap(visible ? this.map : null);
         }
 
-        // Toggle markers visibility
-        if (layer.markers) {
+        // Toggle clusterer visibility
+        if (layer.clusterer) {
+            if (visible) {
+                layer.clusterer.setMap(this.map);
+            } else {
+                layer.clusterer.setMap(null);
+            }
+        } else if (layer.markers) {
+            // Toggle markers visibility (only if not using clusterer)
             layer.markers.forEach(marker => {
                 marker.setMap(visible ? this.map : null);
             });
