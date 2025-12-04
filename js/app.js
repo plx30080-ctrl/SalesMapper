@@ -208,7 +208,7 @@ function setupEventBusSubscriptions() {
         // Clear feature info if it was the currently selected feature
         const currentFeature = stateManager.get('currentEditingFeature');
         if (currentFeature && currentFeature.id === featureId) {
-            stateManager.set('currentEditingFeature', null));
+            stateManager.set('currentEditingFeature', null);
             document.getElementById('featureInfo').innerHTML =
                 '<p class="empty-state">Click on a feature to see details</p>';
         }
