@@ -156,9 +156,9 @@ function initializePluginSystem() {
             console.log('Example plugin registered');
         }
 
-        // Initialize external API with required context
-        const externalAPI = getExternalAPI();
-        console.log('External API initialized and available via window.SalesMapperAPI');
+        // External API is already initialized in plugin-api.js
+        // and available via window.SalesMapperAPI
+        console.log('External API available via window.SalesMapperAPI');
     } catch (error) {
         console.error('Error initializing plugin system:', error);
     }
@@ -433,10 +433,10 @@ function handleCreateBlankLayer() {
     });
 
     // Add to "All Layers" group
-    addLayerToGroup(layerId, allLayersGroupId);
+    addLayerToGroup(layerId, stateManager.get('allLayersGroupId'));
 
     // Also add to active group if one is selected (and it's not "All Layers")
-    if (activeGroup && activeGroup !== allLayersGroupId) {
+    if (stateManager.get('activeGroup') && stateManager.get('activeGroup') !== stateManager.get('allLayersGroupId')) {
         addLayerToGroup(layerId, activeGroup);
     }
 
@@ -486,12 +486,12 @@ function updateLayerGroupList() {
     layerGroups.forEach(group => {
         const groupItem = document.createElement('div');
         // Highlight "All Layers" when activeGroup is null, or highlight the active group
-        const isActive = (activeGroup === group.id) || (activeGroup === null && group.id === allLayersGroupId);
+        const isActive = (stateManager.get('activeGroup') === group.id) || (stateManager.get('activeGroup') === null && group.id === stateManager.get('allLayersGroupId'));
         groupItem.className = 'layer-group-item' + (isActive ? ' active' : '');
         groupItem.dataset.groupId = group.id;
 
         // For "All Layers", show total count of all layers
-        const layerCount = group.id === allLayersGroupId
+        const layerCount = group.id === stateManager.get('allLayersGroupId')
             ? layerManager.getAllLayers().length
             : (group.layerIds || []).length;
 
@@ -544,10 +544,10 @@ function updateLayerGroupList() {
  */
 function selectGroup(groupId) {
     // Special handling for "All Layers" - show all layers
-    if (groupId === allLayersGroupId) {
-        activeGroup = null;
+    if (groupId === stateManager.get('allLayersGroupId')) {
+        stateManager.set('activeGroup', null);
     } else {
-        activeGroup = groupId;
+        stateManager.set('activeGroup', groupId);
     }
     updateLayerGroupList();
     updateLayerList(layerManager.getAllLayers());
@@ -562,7 +562,7 @@ function toggleGroupVisibility(groupId, visible) {
 
     // Get layer IDs based on group type
     let layerIds;
-    if (groupId === allLayersGroupId) {
+    if (groupId === stateManager.get('allLayersGroupId')) {
         // For "All Layers", apply to all layers
         layerIds = layerManager.getAllLayers().map(l => l.id);
     } else {
@@ -594,7 +594,7 @@ function setGroupOpacity(groupId, opacity) {
 
     // Get layer IDs based on group type
     let layerIds;
-    if (groupId === allLayersGroupId) {
+    if (groupId === stateManager.get('allLayersGroupId')) {
         // For "All Layers", apply to all layers
         layerIds = layerManager.getAllLayers().map(l => l.id);
     } else {
@@ -680,7 +680,7 @@ function handleDrawingComplete(drawingData) {
         if (layers.length === 0) {
             targetLayerId = layerManager.createLayer('Drawn Features', [], drawingData.type === 'Point' ? 'point' : 'polygon');
             // Always add to "All Layers" group
-            addLayerToGroup(targetLayerId, allLayersGroupId);
+            addLayerToGroup(targetLayerId, stateManager.get('allLayersGroupId'));
         } else {
             targetLayerId = layers[0].id;
         }
@@ -865,10 +865,10 @@ async function handleCSVUpload() {
             });
 
             // Always add to "All Layers" group
-            addLayerToGroup(layerId, allLayersGroupId);
+            addLayerToGroup(layerId, stateManager.get('allLayersGroupId'));
 
             // Also add to active group if one is selected (and it's not "All Layers")
-            if (activeGroup && activeGroup !== allLayersGroupId) {
+            if (stateManager.get('activeGroup') && stateManager.get('activeGroup') !== stateManager.get('allLayersGroupId')) {
                 addLayerToGroup(layerId, activeGroup);
             }
 
@@ -1015,10 +1015,10 @@ async function handlePasteImport() {
         });
 
         // Always add to "All Layers" group
-        addLayerToGroup(layerId, allLayersGroupId);
+        addLayerToGroup(layerId, stateManager.get('allLayersGroupId'));
 
         // Also add to active group if one is selected (and it's not "All Layers")
-        if (activeGroup && activeGroup !== allLayersGroupId) {
+        if (stateManager.get('activeGroup') && stateManager.get('activeGroup') !== stateManager.get('allLayersGroupId')) {
             addLayerToGroup(layerId, activeGroup);
         }
 
@@ -1172,7 +1172,7 @@ function handleImportValidData(validation) {
                 skippedRows: validation.invalidCount
             });
 
-            addLayerToGroup(layerId, allLayersGroupId);
+            addLayerToGroup(layerId, stateManager.get('allLayersGroupId'));
 
             toastManager.success(
                 `Layer "${layerName}" created with ${features.length} valid features. ${validation.invalidCount} rows skipped.`
@@ -1333,10 +1333,10 @@ async function handleColumnMapSubmit(e) {
         });
 
         // Always add to "All Layers" group
-        addLayerToGroup(layerId, allLayersGroupId);
+        addLayerToGroup(layerId, stateManager.get('allLayersGroupId'));
 
         // Also add to active group if one is selected (and it's not "All Layers")
-        if (activeGroup && activeGroup !== allLayersGroupId) {
+        if (stateManager.get('activeGroup') && stateManager.get('activeGroup') !== stateManager.get('allLayersGroupId')) {
             addLayerToGroup(layerId, activeGroup);
         }
 
@@ -2678,7 +2678,7 @@ async function handleLoadFromFirebase() {
             layerManager.importLayers(result.layers);
 
             // Ensure "All Layers" group exists
-            if (!allLayersGroupId || !layerGroups.has(allLayersGroupId)) {
+            if (!allLayersGroupId || !layerGroups.has(stateManager.get('allLayersGroupId'))) {
                 // Try to find existing "All Layers" group by name
                 let foundAllLayersGroup = false;
                 layerGroups.forEach((group, id) => {
@@ -2695,10 +2695,10 @@ async function handleLoadFromFirebase() {
             }
 
             // Ensure all layers are in the "All Layers" group
-            const allLayersGroup = layerGroups.get(allLayersGroupId);
+            const allLayersGroup = layerGroups.get(stateManager.get('allLayersGroupId'));
             if (allLayersGroup) {
                 layerManager.getAllLayers().forEach(layer => {
-                    addLayerToGroup(layer.id, allLayersGroupId);
+                    addLayerToGroup(layer.id, stateManager.get('allLayersGroupId'));
                 });
             }
 
@@ -2743,7 +2743,7 @@ function enableRealtimeSync() {
             layerManager.importLayers(updatedLayers);
 
             // Ensure "All Layers" group exists
-            if (!allLayersGroupId || !layerGroups.has(allLayersGroupId)) {
+            if (!allLayersGroupId || !layerGroups.has(stateManager.get('allLayersGroupId'))) {
                 // Try to find existing "All Layers" group by name
                 let foundAllLayersGroup = false;
                 layerGroups.forEach((group, id) => {
@@ -2760,10 +2760,10 @@ function enableRealtimeSync() {
             }
 
             // Ensure all layers are in the "All Layers" group
-            const allLayersGroup = layerGroups.get(allLayersGroupId);
+            const allLayersGroup = layerGroups.get(stateManager.get('allLayersGroupId'));
             if (allLayersGroup) {
                 layerManager.getAllLayers().forEach(layer => {
-                    addLayerToGroup(layer.id, allLayersGroupId);
+                    addLayerToGroup(layer.id, stateManager.get('allLayersGroupId'));
                 });
             }
 
