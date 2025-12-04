@@ -3,8 +3,8 @@
  * Coordinates all components and handles user interactions
  */
 
-// Azure Maps subscription key
-const AZURE_MAPS_KEY = '8zaoREb1sCrPeAeKbs8051yFk7WFAB1O8i4CzIpVvLJicQqszva4JQQJ99BKACYeBjFmJl7UAAAgAZMP3wj3';
+// Google Maps API key
+const GOOGLE_MAPS_KEY = 'AIzaSyCUdAbY7osfgatmss5tCYOgybqE1mzEwzA';
 
 // Global instances
 let mapManager;
@@ -121,12 +121,12 @@ async function initializeApp() {
 
     try {
         // Initialize components
-        mapManager = new MapManager('azureMap', AZURE_MAPS_KEY);
+        mapManager = new MapManager('googleMap', GOOGLE_MAPS_KEY);
         await mapManager.initialize();
 
         layerManager = new LayerManager(mapManager);
         csvParser = new CSVParser();
-        geocodingService = new GeocodingService(AZURE_MAPS_KEY);
+        geocodingService = new GeocodingService(GOOGLE_MAPS_KEY);
 
         // Setup event listeners
         setupEventListeners();
@@ -169,17 +169,15 @@ async function initializeApp() {
  * Setup map click handler to clear selection
  */
 function setupMapClickHandler() {
-    mapManager.map.events.add('click', (e) => {
-        // Check if click was on map background (not on a feature)
-        if (!e.shapes || e.shapes.length === 0) {
-            // Clear selection
-            mapManager.clearSelectedFeature();
-            currentEditingFeature = null;
+    google.maps.event.addListener(mapManager.map, 'click', (e) => {
+        // For Google Maps, we clear selection on map click
+        // Feature clicks are handled separately in the data layer
+        mapManager.clearSelectedFeature();
+        currentEditingFeature = null;
 
-            // Reset feature info panel
-            document.getElementById('featureInfo').innerHTML =
-                '<p class="empty-state">Click on a feature to see details</p>';
-        }
+        // Reset feature info panel
+        document.getElementById('featureInfo').innerHTML =
+            '<p class="empty-state">Click on a feature to see details</p>';
     });
 }
 
@@ -1668,264 +1666,197 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
         const layer = layerManager.getLayer(layerId);
         if (!layer) return;
 
-    // Find the actual property name (case-insensitive)
-    let actualPropertyName = property;
-    if (layer.features.length > 0) {
-        const firstFeature = layer.features[0];
-        const foundKey = Object.keys(firstFeature).find(
-            key => key.toLowerCase() === property.toLowerCase()
-        );
-        if (foundKey) {
-            actualPropertyName = foundKey;
+        // Find the actual property name (case-insensitive)
+        let actualPropertyName = property;
+        if (layer.features.length > 0) {
+            const firstFeature = layer.features[0];
+            const foundKey = Object.keys(firstFeature).find(
+                key => key.toLowerCase() === property.toLowerCase()
+            );
+            if (foundKey) {
+                actualPropertyName = foundKey;
+            }
         }
-    }
 
-    // Get unique values for the property
-    const uniqueValues = [...new Set(layer.features.map(f => f[actualPropertyName]))].filter(v => v != null);
+        // Get unique values for the property
+        const uniqueValues = [...new Set(layer.features.map(f => f[actualPropertyName]))].filter(v => v != null);
 
-    console.log('=== TIER STYLING DEBUG ===');
-    console.log('Property to style by:', property);
-    console.log('Actual property name (case-matched):', actualPropertyName);
-    console.log('Unique values found:', uniqueValues);
-    console.log('Sample features (first 3):', layer.features.slice(0, 3).map(f => ({
-        id: f.id,
-        [actualPropertyName]: f[actualPropertyName],
-        allProps: Object.keys(f)
-    })));
+        console.log('=== PROPERTY STYLING DEBUG ===');
+        console.log('Property to style by:', property);
+        console.log('Actual property name (case-matched):', actualPropertyName);
+        console.log('Unique values found:', uniqueValues);
+        console.log('Sample features (first 3):', layer.features.slice(0, 3).map(f => ({
+            id: f.id,
+            [actualPropertyName]: f[actualPropertyName],
+            allProps: Object.keys(f)
+        })));
 
-    if (uniqueValues.length === 0) {
-        showToast(`No values found for property "${property}"`, 'warning');
-        return;
-    }
+        if (uniqueValues.length === 0) {
+            showToast(`No values found for property "${property}"`, 'warning');
+            return;
+        }
 
-    // Define color schemes (support both number and string keys)
-    const tierColors = {
-        1: '#107c10',      // Green (number)
-        '1': '#107c10',    // Green (string)
-        'tier 1': '#107c10',
-        2: '#ffb900',      // Yellow (number)
-        '2': '#ffb900',    // Yellow (string)
-        'tier 2': '#ffb900',
-        3: '#d13438',      // Red (number)
-        '3': '#d13438',    // Red (string)
-        'tier 3': '#d13438'
-    };
+        // Define color schemes (support both number and string keys)
+        const tierColors = {
+            1: '#107c10',      // Green (number)
+            '1': '#107c10',    // Green (string)
+            'tier 1': '#107c10',
+            2: '#ffb900',      // Yellow (number)
+            '2': '#ffb900',    // Yellow (string)
+            'tier 2': '#ffb900',
+            3: '#d13438',      // Red (number)
+            '3': '#d13438',    // Red (string)
+            'tier 3': '#d13438'
+        };
 
-    const defaultColors = [
-        '#0078d4', '#d13438', '#107c10', '#ffb900', '#8764b8',
-        '#00b7c3', '#f7630c', '#ca5010', '#038387', '#486860'
-    ];
+        const defaultColors = [
+            '#0078d4', '#d13438', '#107c10', '#ffb900', '#8764b8',
+            '#00b7c3', '#f7630c', '#ca5010', '#038387', '#486860'
+        ];
 
-    // Create color mapping
-    const colorMap = {};
-    uniqueValues.forEach((value, index) => {
-        if (styleType === 'tier') {
-            // Check direct match first (for numbers), then try string conversion
-            const color = tierColors[value] || tierColors[String(value).toLowerCase()];
-            if (color) {
-                colorMap[value] = color;
+        // Create color mapping
+        const colorMap = {};
+        uniqueValues.forEach((value, index) => {
+            if (styleType === 'tier') {
+                // Check direct match first (for numbers), then try string conversion
+                const color = tierColors[value] || tierColors[String(value).toLowerCase()];
+                if (color) {
+                    colorMap[value] = color;
+                } else {
+                    colorMap[value] = defaultColors[index % defaultColors.length];
+                }
             } else {
                 colorMap[value] = defaultColors[index % defaultColors.length];
             }
-        } else {
-            colorMap[value] = defaultColors[index % defaultColors.length];
-        }
-    });
-
-    console.log('Color map created:', colorMap);
-
-    // Remove existing layer
-    mapManager.removeLayer(layerId);
-
-    // Enable clustering for point layers
-    const enableClustering = layer.type === 'point';
-    const dataSource = mapManager.createDataSource(layerId, enableClustering);
-
-    // Add all features to data source
-    const geoJsonFeatures = layer.features.map((feature, index) => {
-        let geometry;
-
-        if (layer.type === 'polygon' && feature.wkt) {
-            geometry = mapManager.parseWKT(feature.wkt);
-        } else if (layer.type === 'point' && feature.latitude && feature.longitude) {
-            geometry = {
-                type: 'Point',
-                coordinates: [parseFloat(feature.longitude), parseFloat(feature.latitude)]
-            };
-        } else {
-            return null;
-        }
-
-        return {
-            type: 'Feature',
-            id: feature.id || `${layerId}-${index}`,
-            geometry: geometry,
-            properties: { ...feature, layerId: layerId }
-        };
-    }).filter(f => f !== null);
-
-    console.log('GeoJSON features created (first 3):', geoJsonFeatures.slice(0, 3).map(f => ({
-        id: f.id,
-        geometry: f.geometry.type,
-        properties: f.properties
-    })));
-
-    dataSource.add(geoJsonFeatures);
-
-    // Build Azure Maps match expression for data-driven styling
-    // Format: ['match', ['get', 'property'], value1, color1, value2, color2, ..., defaultColor]
-    // Null/undefined values naturally fall through to the default color
-    const matchExpression = ['match', ['get', actualPropertyName]];
-
-    uniqueValues.forEach(value => {
-        matchExpression.push(value);  // Keep original type (number or string)
-        matchExpression.push(colorMap[value]); // The color for that value
-    });
-
-    matchExpression.push('#cccccc'); // Default color for null/undefined and unmatched values
-
-    console.log('Match expression built:', JSON.stringify(matchExpression, null, 2));
-    console.log('=== END TIER STYLING DEBUG ===');
-
-    // Create layers with data-driven styling
-    if (layer.type === 'polygon') {
-        const polygonLayer = new atlas.layer.PolygonLayer(dataSource, `${layerId}-polygons`, {
-            fillColor: matchExpression,
-            fillOpacity: 0.5
         });
 
-        const lineLayer = new atlas.layer.LineLayer(dataSource, `${layerId}-lines`, {
-            strokeColor: matchExpression,
-            strokeWidth: 2
-        });
+        console.log('Color map created:', colorMap);
 
-        mapManager.map.layers.add([polygonLayer, lineLayer]);
-        mapManager.layers.set(layerId, {
-            polygon: polygonLayer,
-            line: lineLayer,
-            color: 'data-driven'
-        });
+        // Remove existing layer
+        mapManager.removeLayer(layerId);
 
-        // Setup click events using the layer objects, not IDs
-        mapManager.map.events.add('click', polygonLayer, (e) => {
-            mapManager.handleFeatureClick(e, layerId);
-        });
-        mapManager.map.events.add('click', lineLayer, (e) => {
-            mapManager.handleFeatureClick(e, layerId);
-        });
-    } else {
-        // Point layer with clustering and data-driven styling
-        // First, get the default color for clusters (use first color in the color map)
-        const defaultClusterColor = Object.values(colorMap)[0] || '#0078d4';
+        // Enable clustering for point layers
+        const enableClustering = layer.type === 'point';
+        const dataLayer = mapManager.createDataSource(layerId, enableClustering);
 
-        // Create bubble layer for clustered points (size based on count)
-        const clusterBubbleLayer = new atlas.layer.BubbleLayer(dataSource, `${layerId}-clusters`, {
-            radius: [
-                'step',
-                ['get', 'point_count'],
-                20,    // Default size
-                10, 25,    // 10+ points
-                50, 30,    // 50+ points
-                100, 35,   // 100+ points
-                500, 40    // 500+ points
-            ],
-            color: defaultClusterColor,
-            strokeWidth: 0,
-            filter: ['has', 'point_count'] // Only show clustered points
-        });
+        // Add all features to data source
+        const geoJsonFeatures = layer.features.map((feature, index) => {
+            let geometry;
 
-        // Create symbol layer for cluster count
-        const clusterLabelLayer = new atlas.layer.SymbolLayer(dataSource, `${layerId}-cluster-labels`, {
-            iconOptions: {
-                image: 'none'
-            },
-            textOptions: {
-                textField: ['get', 'point_count_abbreviated'],
-                offset: [0, 0],
-                color: '#ffffff',
-                size: 14
-            },
-            filter: ['has', 'point_count'] // Only show on clustered points
-        });
-
-        // Create bubble layer for unclustered points with data-driven styling
-        const bubbleLayer = new atlas.layer.BubbleLayer(dataSource, `${layerId}-bubbles`, {
-            color: matchExpression,
-            radius: 8,
-            strokeColor: '#ffffff',
-            strokeWidth: 2,
-            filter: ['!', ['has', 'point_count']] // Only show unclustered points
-        });
-
-        // Create symbol layer for unclustered point labels
-        const symbolLayer = new atlas.layer.SymbolLayer(dataSource, `${layerId}-symbols`, {
-            iconOptions: {
-                image: 'none'
-            },
-            textOptions: {
-                // Use coalesce to handle null names
-                textField: ['coalesce', ['get', 'name'], ''],
-                offset: [0, 1.5],
-                color: '#333333',
-                haloColor: '#ffffff',
-                haloWidth: 2
-            },
-            filter: ['!', ['has', 'point_count']] // Only show on unclustered points
-        });
-
-        // Add layers to map in correct order
-        mapManager.map.layers.add([clusterBubbleLayer, clusterLabelLayer, bubbleLayer, symbolLayer]);
-
-        // Store layer references
-        mapManager.layers.set(layerId, {
-            bubble: clusterBubbleLayer,  // Main bubble layer is the cluster layer
-            clusterLabel: clusterLabelLayer,
-            individualBubble: bubbleLayer,  // Individual point bubbles
-            symbol: symbolLayer,
-            color: 'data-driven'
-        });
-
-        // Setup click event for unclustered points (individual bubbles)
-        mapManager.map.events.add('click', bubbleLayer, (e) => {
-            mapManager.handleFeatureClick(e, layerId);
-        });
-
-        // Setup click event for clusters (zoom in)
-        mapManager.map.events.add('click', clusterBubbleLayer, (e) => {
-            if (e.shapes && e.shapes.length > 0) {
-                const properties = e.shapes[0].getProperties();
-                if (properties.cluster) {
-                    // Get cluster expansion zoom
-                    dataSource.getClusterExpansionZoom(properties.cluster_id).then((zoom) => {
-                        // Zoom to the cluster
-                        mapManager.map.setCamera({
-                            center: e.shapes[0].getCoordinates(),
-                            zoom: zoom
-                        });
-                    });
-                }
+            if (layer.type === 'polygon' && feature.wkt) {
+                geometry = mapManager.parseWKT(feature.wkt);
+            } else if (layer.type === 'point' && feature.latitude && feature.longitude) {
+                geometry = {
+                    type: 'Point',
+                    coordinates: [parseFloat(feature.longitude), parseFloat(feature.latitude)]
+                };
+            } else {
+                return null;
             }
+
+            return {
+                type: 'Feature',
+                id: feature.id || `${layerId}-${index}`,
+                geometry: geometry,
+                properties: { ...feature, layerId: layerId }
+            };
+        }).filter(f => f !== null);
+
+        console.log('GeoJSON features created (first 3):', geoJsonFeatures.slice(0, 3).map(f => ({
+            id: f.id,
+            geometry: f.geometry.type,
+            properties: f.properties
+        })));
+
+        // Add features to data layer
+        geoJsonFeatures.forEach(geoJsonFeature => {
+            dataLayer.addGeoJson(geoJsonFeature);
         });
 
-        // Change cursor on hover for clusters
-        mapManager.map.events.add('mouseenter', clusterBubbleLayer, () => {
-            mapManager.map.getCanvasContainer().style.cursor = 'pointer';
-        });
-        mapManager.map.events.add('mouseleave', clusterBubbleLayer, () => {
-            mapManager.map.getCanvasContainer().style.cursor = 'grab';
-        });
+        console.log('=== END PROPERTY STYLING DEBUG ===');
 
-        // Change cursor on hover for individual points
-        mapManager.map.events.add('mouseenter', bubbleLayer, () => {
-            mapManager.map.getCanvasContainer().style.cursor = 'pointer';
-        });
-        mapManager.map.events.add('mouseleave', bubbleLayer, () => {
-            mapManager.map.getCanvasContainer().style.cursor = 'grab';
-        });
-    }
+        // Apply data-driven styling for Google Maps
+        if (layer.type === 'polygon') {
+            // For polygons, use data layer styling
+            dataLayer.setStyle((feature) => {
+                const propValue = feature.getProperty(actualPropertyName);
+                const color = colorMap[propValue] || '#cccccc';
 
-    // Fit map to data source
-    mapManager.fitMapToDataSource(dataSource);
+                return {
+                    fillColor: color,
+                    fillOpacity: 0.5,
+                    strokeColor: color,
+                    strokeWeight: 2,
+                    clickable: true
+                };
+            });
+
+            // Store layer reference
+            mapManager.layers.set(layerId, {
+                dataLayer: dataLayer,
+                type: 'polygon',
+                color: 'data-driven'
+            });
+
+            // Add click event
+            dataLayer.addListener('click', (event) => {
+                mapManager.handleFeatureClick(event, layerId);
+            });
+        } else {
+            // For points, create markers with appropriate colors
+            const markers = [];
+
+            dataLayer.forEach((feature) => {
+                const geometry = feature.getGeometry();
+                if (geometry.getType() === 'Point') {
+                    const position = geometry.get();
+                    const propValue = feature.getProperty(actualPropertyName);
+                    const color = colorMap[propValue] || '#cccccc';
+
+                    const marker = new google.maps.Marker({
+                        position: { lat: position.lat(), lng: position.lng() },
+                        map: mapManager.map,
+                        title: feature.getProperty('name') || '',
+                        icon: {
+                            path: google.maps.SymbolPath.CIRCLE,
+                            fillColor: color,
+                            fillOpacity: 1,
+                            strokeColor: '#ffffff',
+                            strokeWeight: 2,
+                            scale: 8
+                        }
+                    });
+
+                    // Store feature reference in marker
+                    marker.feature = feature;
+                    marker.layerId = layerId;
+
+                    // Add click listener
+                    marker.addListener('click', () => {
+                        mapManager.handleMarkerClick(marker, layerId);
+                    });
+
+                    markers.push(marker);
+                }
+            });
+
+            // Store markers for later reference
+            if (!mapManager.markers.has(layerId)) {
+                mapManager.markers.set(layerId, []);
+            }
+            mapManager.markers.get(layerId).push(...markers);
+
+            // Store layer reference
+            mapManager.layers.set(layerId, {
+                dataLayer: dataLayer,
+                markers: markers,
+                type: 'point',
+                color: 'data-driven'
+            });
+        }
+
+        // Fit map to data source
+        mapManager.fitMapToDataSource(dataLayer);
 
         // Store style info
         layer.styleType = styleType;
