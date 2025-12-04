@@ -527,22 +527,35 @@ function startDrawingMode(type) {
 /**
  * Handle drawing complete
  */
-function handleDrawingComplete(shape) {
+function handleDrawingComplete(drawingData) {
     mapManager.stopDrawing();
     document.getElementById('drawingStatus').textContent = 'Select a tool to start drawing';
 
     const name = prompt('Enter a name for this feature:', 'New Feature');
     if (!name) {
-        mapManager.clearDrawings();
+        // Remove the drawn shape from map
+        if (drawingData.shape) {
+            drawingData.shape.setMap(null);
+        }
         window.targetLayerForNewFeature = null;
         return;
     }
 
-    const geometry = shape.toJson();
+    // Create WKT geometry string
+    let wkt;
+    if (drawingData.type === 'Point') {
+        wkt = `POINT(${drawingData.coordinates[0]} ${drawingData.coordinates[1]})`;
+    } else if (drawingData.type === 'Polygon') {
+        const coords = drawingData.coordinates[0].map(c => `${c[0]} ${c[1]}`).join(', ');
+        wkt = `POLYGON((${coords}))`;
+    }
+
     const properties = {
         name: name,
         id: `drawn_${Date.now()}`,
-        source: 'manual'
+        source: 'manual',
+        geometry: wkt,
+        type: drawingData.type
     };
 
     let targetLayerId;
@@ -563,15 +576,18 @@ function handleDrawingComplete(shape) {
         }
     }
 
-    const feature = { ...properties, ...geometry };
     const layer = layerManager.getLayer(targetLayerId);
     if (layer) {
-        layer.features.push(feature);
+        layer.features.push(properties);
         layerManager.notifyUpdate();
-    }
 
-    mapManager.clearDrawings();
-    showToast(`Feature added to "${layer.name}"`, 'success');
+        // Remove the temporary drawn shape since it will be re-rendered as part of the layer
+        if (drawingData.shape) {
+            drawingData.shape.setMap(null);
+        }
+
+        showToast(`Feature added to "${layer.name}"`, 'success');
+    }
 }
 
 /**
@@ -1411,20 +1427,46 @@ function createLayerItem(layer) {
     const opacityPercent = Math.round(opacity * 100);
 
     div.innerHTML = `
-        <div class="layer-reorder-btns">
-            <button class="layer-move-btn" data-direction="up" title="Move layer up">▲</button>
-            <button class="layer-move-btn" data-direction="down" title="Move layer down">▼</button>
+        <div class="layer-header">
+            <div class="layer-reorder-btns">
+                <button class="layer-move-btn" data-direction="up" title="Move layer up">▲</button>
+                <button class="layer-move-btn" data-direction="down" title="Move layer down">▼</button>
+            </div>
+            <button class="layer-expand-btn" title="Expand layer">▶</button>
+            <div class="layer-info">
+                <input type="checkbox" class="layer-checkbox" ${layer.visible ? 'checked' : ''}>
+                <span class="layer-name" title="${layer.name}">${layer.name}</span>
+                <span class="layer-count">${layer.features.length}</span>
+            </div>
+            <div class="layer-opacity-control">
+                <input type="range" class="opacity-slider" min="0" max="100" value="${opacityPercent}" title="Opacity: ${opacityPercent}%">
+            </div>
+            <button class="layer-menu-btn">⋮</button>
         </div>
-        <div class="layer-info">
-            <input type="checkbox" class="layer-checkbox" ${layer.visible ? 'checked' : ''}>
-            <span class="layer-name" title="${layer.name}">${layer.name}</span>
-            <span class="layer-count">${layer.features.length}</span>
-        </div>
-        <div class="layer-opacity-control">
-            <input type="range" class="opacity-slider" min="0" max="100" value="${opacityPercent}" title="Opacity: ${opacityPercent}%">
-        </div>
-        <button class="layer-menu-btn">⋮</button>
+        <div class="layer-features-list" style="display: none;"></div>
     `;
+
+    const layerHeader = div.querySelector('.layer-header');
+    const featuresContainer = div.querySelector('.layer-features-list');
+    const expandBtn = div.querySelector('.layer-expand-btn');
+
+    // Expand/collapse layer
+    expandBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isExpanded = featuresContainer.style.display !== 'none';
+
+        if (isExpanded) {
+            featuresContainer.style.display = 'none';
+            expandBtn.textContent = '▶';
+            expandBtn.title = 'Expand layer';
+        } else {
+            // Populate features list
+            populateFeaturesList(featuresContainer, layer);
+            featuresContainer.style.display = 'block';
+            expandBtn.textContent = '▼';
+            expandBtn.title = 'Collapse layer';
+        }
+    });
 
     // Visibility toggle
     div.querySelector('.layer-checkbox').addEventListener('change', (e) => {
@@ -1457,6 +1499,142 @@ function createLayerItem(layer) {
     });
 
     return div;
+}
+
+/**
+ * Populate the features list for a layer
+ */
+function populateFeaturesList(container, layer) {
+    container.innerHTML = '';
+
+    if (!layer.features || layer.features.length === 0) {
+        container.innerHTML = '<p class="empty-state" style="padding: 0.5rem; font-size: 0.85rem;">No features in this layer</p>';
+        return;
+    }
+
+    layer.features.forEach((feature, index) => {
+        const featureItem = document.createElement('div');
+        featureItem.className = 'feature-item';
+        featureItem.dataset.featureId = feature.id;
+
+        // Get feature name or create a default one
+        const featureName = feature.name || feature.Name ||
+                           feature.description || feature.Description ||
+                           `Feature ${index + 1}`;
+
+        featureItem.innerHTML = `
+            <input type="checkbox" class="feature-checkbox" ${!feature.hidden ? 'checked' : ''} title="Toggle visibility">
+            <span class="feature-name" title="${featureName}">${featureName}</span>
+            <button class="feature-edit-btn" title="Edit feature">✏️</button>
+            <button class="feature-delete-btn" title="Delete feature">🗑️</button>
+        `;
+
+        // Feature visibility toggle
+        const checkbox = featureItem.querySelector('.feature-checkbox');
+        checkbox.addEventListener('change', (e) => {
+            e.stopPropagation();
+            toggleFeatureVisibility(layer.id, feature.id, checkbox.checked);
+        });
+
+        // Feature name click - select and show in info panel
+        const nameSpan = featureItem.querySelector('.feature-name');
+        nameSpan.style.cursor = 'pointer';
+        nameSpan.addEventListener('click', (e) => {
+            e.stopPropagation();
+            selectFeature(layer.id, feature);
+        });
+
+        // Edit button
+        featureItem.querySelector('.feature-edit-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            editFeature(layer.id, feature);
+        });
+
+        // Delete button
+        featureItem.querySelector('.feature-delete-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteFeature(layer.id, feature);
+        });
+
+        container.appendChild(featureItem);
+    });
+}
+
+/**
+ * Toggle individual feature visibility
+ */
+function toggleFeatureVisibility(layerId, featureId, visible) {
+    const layer = mapManager.layers.get(layerId);
+    if (!layer) return;
+
+    // Find the marker for this feature
+    if (layer.markers) {
+        const marker = layer.markers.find(m => {
+            const mFeature = m.feature;
+            return mFeature && (mFeature.getId() === featureId ||
+                               (mFeature.getProperty && mFeature.getProperty('id') === featureId));
+        });
+
+        if (marker) {
+            marker.setVisible(visible);
+        }
+    }
+
+    // Update feature hidden property
+    const layerData = layerManager.getLayer(layerId);
+    if (layerData) {
+        const feature = layerData.features.find(f => f.id === featureId);
+        if (feature) {
+            feature.hidden = !visible;
+        }
+    }
+}
+
+/**
+ * Select a feature and show its info
+ */
+function selectFeature(layerId, feature) {
+    currentEditingFeature = {
+        layerId: layerId,
+        id: feature.id,
+        properties: feature
+    };
+    updateFeatureInfo(feature);
+}
+
+/**
+ * Edit a feature
+ */
+function editFeature(layerId, feature) {
+    currentEditingFeature = {
+        layerId: layerId,
+        id: feature.id,
+        properties: feature
+    };
+    openEditModal();
+}
+
+/**
+ * Delete a feature
+ */
+function deleteFeature(layerId, feature) {
+    const featureName = feature.name || feature.Name || 'this feature';
+    if (!confirm(`Delete ${featureName}?`)) {
+        return;
+    }
+
+    layerManager.deleteFeature(layerId, feature.id);
+    showToast('Feature deleted', 'success');
+
+    // Refresh the expanded layer if it's still open
+    const layerItem = document.querySelector(`[data-layer-id="${layerId}"]`);
+    if (layerItem) {
+        const featuresContainer = layerItem.querySelector('.layer-features-list');
+        if (featuresContainer && featuresContainer.style.display !== 'none') {
+            const layer = layerManager.getLayer(layerId);
+            populateFeaturesList(featuresContainer, layer);
+        }
+    }
 }
 
 /**
