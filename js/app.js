@@ -447,16 +447,10 @@ function handleAddGroup() {
  * Create a layer group
  */
 function createLayerGroup(name) {
-    const groupId = `group_${Date.now()}`;
-    layerGroups.set(groupId, {
-        id: groupId,
-        name: name,
-        layerIds: [],
-        visible: true,
-        opacity: 1.0
-    });
+    // Use layerManager's method to create group properly
+    const groupId = layerManager.createLayerGroup(name);
 
-    updateLayerGroupList();
+    // EventBus will trigger updateLayerGroupList via subscription
     return groupId;
 }
 
@@ -467,12 +461,15 @@ function updateLayerGroupList() {
     const groupList = document.getElementById('layerGroupList');
     groupList.innerHTML = '';
 
-    if (layerGroups.size === 0) {
+    // Get layer groups from LayerManager
+    const layerGroups = layerManager.getAllLayerGroups();
+
+    if (layerGroups.length === 0) {
         groupList.innerHTML = '<p class="empty-state">No groups. Click + to add one.</p>';
         return;
     }
 
-    layerGroups.forEach(group => {
+    layerManager.getAllLayerGroups().forEach(group => {
         const groupItem = document.createElement('div');
         // Highlight "All Layers" when activeGroup is null, or highlight the active group
         const isActive = (stateManager.get('activeGroup') === group.id) || (stateManager.get('activeGroup') === null && group.id === stateManager.get('allLayersGroupId'));
@@ -546,7 +543,7 @@ function selectGroup(groupId) {
  * Toggle group visibility
  */
 function toggleGroupVisibility(groupId, visible) {
-    const group = layerGroups.get(groupId);
+    const group = layerManager.layerGroups.get(groupId);
     if (!group) return;
 
     // Get layer IDs based on group type
@@ -578,7 +575,7 @@ function toggleGroupVisibility(groupId, visible) {
  * Set opacity for all layers in a group
  */
 function setGroupOpacity(groupId, opacity) {
-    const group = layerGroups.get(groupId);
+    const group = layerManager.layerGroups.get(groupId);
     if (!group) return;
 
     // Get layer IDs based on group type
@@ -1221,17 +1218,9 @@ function handleDownloadErrors(validation) {
  * Add layer to group
  */
 function addLayerToGroup(layerId, groupId) {
-    const group = layerGroups.get(groupId);
-    if (group) {
-        // Ensure layerIds array exists
-        if (!group.layerIds) {
-            group.layerIds = [];
-        }
-        if (!group.layerIds.includes(layerId)) {
-            group.layerIds.push(layerId);
-            updateLayerGroupList();
-        }
-    }
+    // Use layerManager's method to properly add layer to group
+    layerManager.addLayerToGroup(layerId, groupId);
+    // EventBus will trigger updateLayerGroupList via subscription
 }
 
 /**
@@ -1531,7 +1520,7 @@ function updateLayerList(layers) {
     // Filter layers by active group
     let displayLayers = layers;
     if (activeGroup) {
-        const group = layerGroups.get(activeGroup);
+        const group = layerManager.layerGroups.get(activeGroup);
         if (group) {
             displayLayers = layers.filter(l => (group.layerIds || []).includes(l.id));
         }
@@ -2223,13 +2212,13 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
  */
 function showMoveToGroupDialog(layerId) {
     const groupNames = [];
-    layerGroups.forEach(g => groupNames.push(g.name));
+    layerManager.getAllLayerGroups().forEach(g => groupNames.push(g.name));
 
     const groupName = prompt('Move to group:\n' + groupNames.join('\n') + '\n\nEnter group name:');
     if (!groupName) return;
 
     let targetGroupId = null;
-    layerGroups.forEach((g, id) => {
+    layerManager.getAllLayerGroups().forEach((g, id) => {
         if (g.name === groupName) targetGroupId = id;
     });
 
@@ -2251,7 +2240,7 @@ function showMoveToGroupDialog(layerId) {
  * Remove layer from all groups
  */
 function removeLayerFromAllGroups(layerId) {
-    layerGroups.forEach(group => {
+    layerManager.getAllLayerGroups().forEach(group => {
         if (!group.layerIds) {
             group.layerIds = [];
         }
@@ -2657,9 +2646,9 @@ async function handleLoadFromFirebase() {
         if (result.layers && Object.keys(result.layers).length > 0) {
             // Load groups if available
             if (result.layers._groups) {
-                layerGroups.clear();
+                layerManager.layerGroups.clear();
                 result.layers._groups.forEach(g => {
-                    layerGroups.set(g.id, g);
+                    layerManager.layerGroups.set(g.id, g);
                 });
                 delete result.layers._groups;
             }
@@ -2667,10 +2656,10 @@ async function handleLoadFromFirebase() {
             layerManager.importLayers(result.layers);
 
             // Ensure "All Layers" group exists
-            if (!allLayersGroupId || !layerGroups.has(stateManager.get('allLayersGroupId'))) {
+            if (!allLayersGroupId || !layerManager.layerGroups.has(stateManager.get('allLayersGroupId'))) {
                 // Try to find existing "All Layers" group by name
                 let foundAllLayersGroup = false;
-                layerGroups.forEach((group, id) => {
+                layerManager.getAllLayerGroups().forEach((group, id) => {
                     if (group.name === 'All Layers') {
                         allLayersGroupId = id;
                         foundAllLayersGroup = true;
@@ -2684,7 +2673,7 @@ async function handleLoadFromFirebase() {
             }
 
             // Ensure all layers are in the "All Layers" group
-            const allLayersGroup = layerGroups.get(stateManager.get('allLayersGroupId'));
+            const allLayersGroup = layerManager.layerGroups.get(stateManager.get('allLayersGroupId'));
             if (allLayersGroup) {
                 layerManager.getAllLayers().forEach(layer => {
                     addLayerToGroup(layer.id, stateManager.get('allLayersGroupId'));
@@ -2722,9 +2711,9 @@ function enableRealtimeSync() {
 
         if (Object.keys(updatedLayers).length > 0 && !document.getElementById('editModal').classList.contains('show')) {
             if (updatedLayers._groups) {
-                layerGroups.clear();
+                layerManager.layerGroups.clear();
                 updatedLayers._groups.forEach(g => {
-                    layerGroups.set(g.id, g);
+                    layerManager.layerGroups.set(g.id, g);
                 });
                 delete updatedLayers._groups;
             }
@@ -2732,10 +2721,10 @@ function enableRealtimeSync() {
             layerManager.importLayers(updatedLayers);
 
             // Ensure "All Layers" group exists
-            if (!allLayersGroupId || !layerGroups.has(stateManager.get('allLayersGroupId'))) {
+            if (!allLayersGroupId || !layerManager.layerGroups.has(stateManager.get('allLayersGroupId'))) {
                 // Try to find existing "All Layers" group by name
                 let foundAllLayersGroup = false;
-                layerGroups.forEach((group, id) => {
+                layerManager.getAllLayerGroups().forEach((group, id) => {
                     if (group.name === 'All Layers') {
                         allLayersGroupId = id;
                         foundAllLayersGroup = true;
@@ -2749,7 +2738,7 @@ function enableRealtimeSync() {
             }
 
             // Ensure all layers are in the "All Layers" group
-            const allLayersGroup = layerGroups.get(stateManager.get('allLayersGroupId'));
+            const allLayersGroup = layerManager.layerGroups.get(stateManager.get('allLayersGroupId'));
             if (allLayersGroup) {
                 layerManager.getAllLayers().forEach(layer => {
                     addLayerToGroup(layer.id, stateManager.get('allLayersGroupId'));
