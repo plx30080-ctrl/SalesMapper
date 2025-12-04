@@ -9,6 +9,10 @@ let layerManager;
 let csvParser;
 let geocodingService;
 
+// Global state for UI interactions
+let currentLayerForActions = null;  // Currently selected layer for context menu actions
+let currentCSVData = null;          // Currently loaded CSV data for import workflow
+
 // Data services are initialized in initDataServices()
 // Access via: storageService, firebaseService, dataSyncService
 
@@ -106,6 +110,9 @@ async function initializeApp() {
         csvParser = new CSVParser();
         geocodingService = new GeocodingService();
 
+        // Setup map callbacks for feature selection and drawing
+        setupMapCallbacks();
+
         // Store managers in StateManager for access
         stateManager.set('mapManager', mapManager, true);
         stateManager.set('layerManager', layerManager, true);
@@ -192,6 +199,12 @@ function setupEventBusSubscriptions() {
         updateLayerList(layerManager.getAllLayers());
     });
 
+    // Layer reordering event
+    eventBus.on('layer.reordered', ({ layerId, direction }) => {
+        console.log('Layer reordered:', layerId, direction);
+        updateLayerList(layerManager.getAllLayers());
+    });
+
     // Feature events
     eventBus.on('feature.updated', ({ layerId, featureId }) => {
         console.log('Feature updated:', featureId);
@@ -201,7 +214,7 @@ function setupEventBusSubscriptions() {
             const layer = layerManager.getLayer(layerId);
             const feature = layer?.features.find(f => f.id === featureId);
             if (feature) {
-                displayFeatureInfo(feature, layerId);
+                updateFeatureInfo(feature);
             }
         }
     });
@@ -226,6 +239,19 @@ function setupEventBusSubscriptions() {
     eventBus.on('group.deleted', ({ groupId }) => {
         console.log('Layer group deleted:', groupId);
         updateLayerGroupList();
+    });
+
+    // Layer-group membership events
+    eventBus.on('layer.grouped', ({ layerId, groupId }) => {
+        console.log('Layer added to group:', layerId, groupId);
+        updateLayerGroupList();
+        updateLayerList(layerManager.getAllLayers());
+    });
+
+    eventBus.on('layer.ungrouped', ({ layerId }) => {
+        console.log('Layer removed from group:', layerId);
+        updateLayerGroupList();
+        updateLayerList(layerManager.getAllLayers());
     });
 
     eventBus.on('group.visibility.changed', ({ groupId, visible }) => {
@@ -257,6 +283,35 @@ function setupEventBusSubscriptions() {
     });
 
     console.log('EventBus subscriptions setup complete');
+}
+
+/**
+ * Setup map callbacks for feature selection and drawing completion
+ */
+function setupMapCallbacks() {
+    // Handle feature click (when user clicks on a marker or polygon)
+    mapManager.setOnFeatureClick((selectedFeature) => {
+        console.log('Feature clicked:', selectedFeature);
+
+        // Store the selected feature in state
+        stateManager.set('currentEditingFeature', selectedFeature);
+
+        // Update the feature info panel
+        if (selectedFeature && selectedFeature.properties) {
+            updateFeatureInfo(selectedFeature.properties);
+        }
+
+        // Emit event for any listeners
+        eventBus.emit('feature.selected', selectedFeature);
+    });
+
+    // Handle drawing completion (when user finishes drawing a shape)
+    mapManager.setOnDrawComplete((drawnShape) => {
+        console.log('Drawing completed:', drawnShape);
+        handleDrawingComplete(drawnShape);
+    });
+
+    console.log('Map callbacks setup complete');
 }
 
 /**
@@ -594,8 +649,14 @@ function selectGroup(groupId) {
  * Toggle group visibility
  */
 function toggleGroupVisibility(groupId, visible) {
-    const group = layerManager.layerGroups.get(groupId);
+    const layerGroups = layerManager.layerGroups;
+    const group = layerGroups.get(groupId);
     if (!group) return;
+
+    // Update group visibility in state
+    group.visible = visible;
+    layerGroups.set(groupId, group);
+    layerManager.layerGroups = layerGroups;
 
     // Get layer IDs based on group type
     let layerIds;
@@ -606,20 +667,21 @@ function toggleGroupVisibility(groupId, visible) {
         layerIds = group.layerIds || [];
     }
 
+    // Update each layer's visibility and persist to state
+    const layers = layerManager.layers;
     layerIds.forEach(layerId => {
-        const layer = layerManager.getLayer(layerId);
+        const layer = layers.get(layerId);
         if (layer) {
-            if (visible) {
-                mapManager.toggleLayerVisibility(layerId, true);
-                layer.visible = true;
-            } else {
-                mapManager.toggleLayerVisibility(layerId, false);
-                layer.visible = false;
-            }
+            layer.visible = visible;
+            layers.set(layerId, layer);
+            mapManager.toggleLayerVisibility(layerId, visible);
         }
     });
+    layerManager.layers = layers;
 
-    layerManager.notifyUpdate();
+    // Update UI without triggering full refresh (avoid layer list filtering issues)
+    updateLayerGroupList();
+    updateLayerList(layerManager.getAllLayers());
 }
 
 /**
@@ -2271,29 +2333,31 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
  * Show move to group dialog
  */
 function showMoveToGroupDialog(layerId) {
-    const groupNames = [];
-    layerManager.getAllLayerGroups().forEach(g => groupNames.push(g.name));
+    const groups = layerManager.getAllLayerGroups();
+    const groupNames = groups.map(g => g.name);
 
     const groupName = prompt('Move to group:\n' + groupNames.join('\n') + '\n\nEnter group name:');
     if (!groupName) return;
 
-    let targetGroupId = null;
-    layerManager.getAllLayerGroups().forEach((g, id) => {
-        if (g.name === groupName) targetGroupId = id;
-    });
+    // Find group by name and get its ID
+    const targetGroup = groups.find(g => g.name === groupName);
 
-    if (!targetGroupId) {
+    if (!targetGroup) {
         toastManager.error('Group not found');
         return;
     }
 
-    // Remove from all groups
+    // Remove from all groups first
     removeLayerFromAllGroups(layerId);
 
-    // Add to target group
-    addLayerToGroup(layerId, targetGroupId);
+    // Add to target group using the actual group ID
+    addLayerToGroup(layerId, targetGroup.id);
 
-    toastManager.success('Layer moved to group');
+    // Update UI
+    updateLayerGroupList();
+    updateLayerList(layerManager.getAllLayers());
+
+    toastManager.success(`Layer moved to "${groupName}"`);
 }
 
 /**
@@ -2446,9 +2510,10 @@ function updateFeatureInfo(properties) {
  * Handle deleting a feature from the info panel
  */
 function handleDeleteFeatureFromInfo() {
+    const currentEditingFeature = stateManager.get('currentEditingFeature');
     if (!currentEditingFeature) return;
 
-    const featureName = currentEditingFeature.name || 'this feature';
+    const featureName = currentEditingFeature.properties?.name || 'this feature';
     if (!confirm(`Delete ${featureName}?`)) {
         return;
     }
@@ -2470,6 +2535,7 @@ function handleDeleteFeatureFromInfo() {
  * Open edit modal
  */
 function openEditModal() {
+    const currentEditingFeature = stateManager.get('currentEditingFeature');
     if (!currentEditingFeature) {
         toastManager.warning('No feature selected');
         return;
@@ -2478,7 +2544,7 @@ function openEditModal() {
     const formFields = document.getElementById('editFormFields');
     formFields.innerHTML = '';
 
-    const properties = currentEditingFeature.properties;
+    const properties = currentEditingFeature.properties || {};
 
     // Helper function to create form field
     const createFormField = (key, value = '') => {
@@ -2532,6 +2598,7 @@ function openEditModal() {
 function handleEditFormSubmit(e) {
     e.preventDefault();
 
+    const currentEditingFeature = stateManager.get('currentEditingFeature');
     if (!currentEditingFeature) return;
 
     const formData = new FormData(e.target);
@@ -2541,13 +2608,23 @@ function handleEditFormSubmit(e) {
         updatedProperties[key] = value;
     }
 
+    // Get the feature ID from properties or the feature itself
+    const featureId = currentEditingFeature.properties?.id || currentEditingFeature.id;
+
     layerManager.updateFeature(
         currentEditingFeature.layerId,
-        currentEditingFeature.properties.id,
+        featureId,
         updatedProperties
     );
 
-    updateFeatureInfo({ ...currentEditingFeature.properties, ...updatedProperties });
+    // Update the stored feature with new properties
+    const updatedFeature = {
+        ...currentEditingFeature,
+        properties: { ...currentEditingFeature.properties, ...updatedProperties }
+    };
+    stateManager.set('currentEditingFeature', updatedFeature);
+
+    updateFeatureInfo(updatedFeature.properties);
 
     modalManager.close('editModal');
     toastManager.success('Feature updated');
@@ -2557,12 +2634,15 @@ function handleEditFormSubmit(e) {
  * Handle delete feature
  */
 function handleDeleteFeature() {
+    const currentEditingFeature = stateManager.get('currentEditingFeature');
     if (!currentEditingFeature) return;
 
     if (confirm('Delete this feature?')) {
+        const featureId = currentEditingFeature.properties?.id || currentEditingFeature.id;
+
         layerManager.deleteFeature(
             currentEditingFeature.layerId,
-            currentEditingFeature.properties.id
+            featureId
         );
 
         modalManager.close('editModal');
