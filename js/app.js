@@ -2439,7 +2439,7 @@ function handleFeatureSelection(selectedFeature) {
 }
 
 /**
- * Update feature info panel - ONLY show Name, Description, Tier, BDM
+ * Update feature info panel - Show all CSV properties
  */
 function updateFeatureInfo(properties) {
     const featureInfo = document.getElementById('featureInfo');
@@ -2451,32 +2451,62 @@ function updateFeatureInfo(properties) {
         return;
     }
 
-    // Define which properties to display (in order)
-    const displayProps = ['name', 'description', 'tier', 'bdm'];
-    const propLabels = {
-        name: 'Name',
-        description: 'Description',
-        tier: 'Tier',
-        bdm: 'BDM'
+    // Internal/technical properties to skip (not useful for display)
+    const skipProps = ['layerId', 'wkt', 'geometry', 'latitude', 'longitude', 'lat', 'lng', 'id'];
+
+    // Priority properties to show first (if they exist)
+    const priorityProps = ['name', 'Name', 'NAME', 'description', 'Description', 'DESCRIPTION',
+                           'tier', 'Tier', 'TIER', 'bdm', 'BDM', 'Bdm'];
+
+    // Helper to format property labels nicely
+    const formatLabel = (key) => {
+        // Convert camelCase or snake_case to Title Case
+        return key
+            .replace(/([A-Z])/g, ' $1') // Add space before capitals
+            .replace(/_/g, ' ')          // Replace underscores with spaces
+            .replace(/^\s+/, '')         // Remove leading space
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+            .join(' ');
     };
 
     let hasData = false;
+    const displayedKeys = new Set();
 
-    displayProps.forEach(key => {
-        const value = properties[key] || properties[key.toLowerCase()] ||
-                     properties[key.toUpperCase()] ||
-                     properties[key.charAt(0).toUpperCase() + key.slice(1)];
-
-        if (value !== null && value !== undefined && value !== '') {
-            hasData = true;
-            const propDiv = document.createElement('div');
-            propDiv.className = 'feature-property';
-            propDiv.innerHTML = `
-                <span class="property-label">${propLabels[key]}:</span>
-                <span class="property-value">${value}</span>
-            `;
-            featureInfo.appendChild(propDiv);
+    // First, display priority properties in order (if they exist)
+    priorityProps.forEach(key => {
+        if (properties.hasOwnProperty(key) && !displayedKeys.has(key.toLowerCase())) {
+            const value = properties[key];
+            if (value !== null && value !== undefined && value !== '') {
+                hasData = true;
+                displayedKeys.add(key.toLowerCase());
+                const propDiv = document.createElement('div');
+                propDiv.className = 'feature-property';
+                propDiv.innerHTML = `
+                    <span class="property-label">${formatLabel(key)}:</span>
+                    <span class="property-value">${value}</span>
+                `;
+                featureInfo.appendChild(propDiv);
+            }
         }
+    });
+
+    // Then display all remaining properties
+    Object.entries(properties).forEach(([key, value]) => {
+        // Skip internal properties, already displayed properties, and empty values
+        if (skipProps.includes(key) || skipProps.includes(key.toLowerCase())) return;
+        if (displayedKeys.has(key.toLowerCase())) return;
+        if (value === null || value === undefined || value === '') return;
+
+        hasData = true;
+        displayedKeys.add(key.toLowerCase());
+        const propDiv = document.createElement('div');
+        propDiv.className = 'feature-property';
+        propDiv.innerHTML = `
+            <span class="property-label">${formatLabel(key)}:</span>
+            <span class="property-value">${value}</span>
+        `;
+        featureInfo.appendChild(propDiv);
     });
 
     if (!hasData) {
