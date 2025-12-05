@@ -564,12 +564,15 @@ class MapManager {
      */
     handleMarkerClick(marker, layerId) {
         const feature = marker.feature;
+
+        // Handle both plain objects (from CSV) and Google Maps Features
         const properties = this.featurePropertiesToObject(feature);
+        const featureId = feature.id || properties.id || `marker_${Date.now()}`;
 
         this.selectedFeature = {
             feature: feature,
             layerId: layerId,
-            id: feature.getId() || properties.id,
+            id: featureId,
             properties: properties
         };
 
@@ -581,15 +584,34 @@ class MapManager {
 
     /**
      * Convert feature properties to plain object
-     * @param {google.maps.Data.Feature} feature - Feature
+     * Handles both Google Maps Data.Feature objects and plain JavaScript objects
+     * @param {google.maps.Data.Feature|Object} feature - Feature or plain object
      * @returns {Object} Properties object
      */
     featurePropertiesToObject(feature) {
-        const properties = {};
-        feature.forEachProperty((value, key) => {
-            properties[key] = value;
-        });
-        return properties;
+        // If it's a Google Maps Feature with forEachProperty method
+        if (feature && typeof feature.forEachProperty === 'function') {
+            const properties = {};
+            feature.forEachProperty((value, key) => {
+                properties[key] = value;
+            });
+            return properties;
+        }
+
+        // If it's already a plain object, return a copy of it
+        // Exclude internal properties like 'wkt' for cleaner display
+        if (feature && typeof feature === 'object') {
+            const properties = {};
+            for (const [key, value] of Object.entries(feature)) {
+                // Skip internal/geometry properties
+                if (key !== 'wkt' && key !== 'geometry' && key !== 'layerId') {
+                    properties[key] = value;
+                }
+            }
+            return properties;
+        }
+
+        return {};
     }
 
     /**
