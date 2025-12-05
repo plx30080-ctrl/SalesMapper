@@ -428,7 +428,25 @@ class MapManager {
     updateLayerClickability(enabled) {
         this.layers.forEach(layer => {
             if (layer.type === 'polygon' && layer.dataLayer) {
-                layer.dataLayer.setStyle(() => this.buildPolygonStyle(layer.color));
+                // Get the current style (could be a function for data-driven styling)
+                const currentStyle = layer.dataLayer.getStyle();
+
+                if (typeof currentStyle === 'function') {
+                    // Preserve data-driven styling, just update clickability
+                    layer.dataLayer.setStyle((feature) => {
+                        const featureStyle = currentStyle(feature) || {};
+                        return {
+                            ...featureStyle,
+                            clickable: enabled
+                        };
+                    });
+                } else {
+                    // Simple style object - update clickable property
+                    layer.dataLayer.setStyle({
+                        ...(currentStyle || this.buildPolygonStyle(layer.color)),
+                        clickable: enabled
+                    });
+                }
             }
 
             if (layer.markers) {
