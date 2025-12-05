@@ -635,8 +635,11 @@ function updateLayerGroupList() {
  * Select a layer group
  */
 function selectGroup(groupId) {
-    // Special handling for "All Layers" - show all layers
-    if (groupId === stateManager.get('allLayersGroupId')) {
+    const currentActiveGroup = stateManager.get('activeGroup');
+    const allLayersGroupId = stateManager.get('allLayersGroupId');
+
+    // If clicking "All Layers" or clicking the currently active group, show all layers
+    if (groupId === allLayersGroupId || groupId === currentActiveGroup) {
         stateManager.set('activeGroup', null);
     } else {
         stateManager.set('activeGroup', groupId);
@@ -2752,7 +2755,7 @@ async function handleSaveToFirebase() {
 
     try {
         const layersData = layerManager.exportAllLayers();
-        const groupsData = Array.from(layerGroups.values());
+        const groupsData = Array.from(layerManager.layerGroups.values());
 
         await firebaseManager.saveAllLayers({
             ...layersData,
