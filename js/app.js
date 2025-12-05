@@ -575,15 +575,21 @@ function updateLayerGroupList() {
         return;
     }
 
+    // Track which groups are expanded (persisted in state)
+    const expandedGroups = stateManager.get('expandedGroups') || new Set();
+
     layerManager.getAllLayerGroups().forEach(group => {
         const groupItem = document.createElement('div');
         // Highlight "All Layers" when activeGroup is null, or highlight the active group
         const isActive = (stateManager.get('activeGroup') === group.id) || (stateManager.get('activeGroup') === null && group.id === stateManager.get('allLayersGroupId'));
-        groupItem.className = 'layer-group-item' + (isActive ? ' active' : '');
+        const isExpanded = expandedGroups.has ? expandedGroups.has(group.id) : expandedGroups[group.id];
+        const isAllLayers = group.id === stateManager.get('allLayersGroupId');
+
+        groupItem.className = 'layer-group-item' + (isActive ? ' active' : '') + (isExpanded ? ' expanded' : '');
         groupItem.dataset.groupId = group.id;
 
         // For "All Layers", show total count of all layers
-        const layerCount = group.id === stateManager.get('allLayersGroupId')
+        const layerCount = isAllLayers
             ? layerManager.getAllLayers().length
             : (group.layerIds || []).length;
 
@@ -591,13 +597,34 @@ function updateLayerGroupList() {
         const groupOpacityPercent = Math.round(groupOpacity * 100);
 
         groupItem.innerHTML = `
-            <input type="checkbox" class="layer-group-toggle" ${group.visible ? 'checked' : ''}>
-            <span class="layer-group-name">${group.name}</span>
-            <span class="layer-group-count">${layerCount}</span>
-            <div class="layer-opacity-control">
-                <input type="range" class="group-opacity-slider" min="0" max="100" value="${groupOpacityPercent}" title="Group Opacity: ${groupOpacityPercent}%">
+            <div class="layer-group-header">
+                <button class="group-expand-btn" title="${isExpanded ? 'Collapse' : 'Expand'}">${isExpanded ? '▼' : '▶'}</button>
+                <input type="checkbox" class="layer-group-toggle" ${group.visible ? 'checked' : ''}>
+                <span class="layer-group-name">${group.name}</span>
+                <span class="layer-group-count">${layerCount}</span>
+                <div class="layer-opacity-control">
+                    <input type="range" class="group-opacity-slider" min="0" max="100" value="${groupOpacityPercent}" title="Group Opacity: ${groupOpacityPercent}%">
+                </div>
+            </div>
+            <div class="layer-group-layers" style="display: ${isExpanded ? 'block' : 'none'};">
+                <!-- Nested layers will be added here -->
             </div>
         `;
+
+        const groupHeader = groupItem.querySelector('.layer-group-header');
+        const layersContainer = groupItem.querySelector('.layer-group-layers');
+        const expandBtn = groupItem.querySelector('.group-expand-btn');
+
+        // Expand/collapse group to show layers
+        expandBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleGroupExpanded(group.id, layersContainer, expandBtn);
+        });
+
+        // Populate nested layers if expanded
+        if (isExpanded) {
+            populateGroupLayers(layersContainer, group);
+        }
 
         // Toggle group visibility
         groupItem.querySelector('.layer-group-toggle').addEventListener('click', (e) => {
@@ -616,19 +643,154 @@ function updateLayerGroupList() {
             setGroupOpacity(group.id, newOpacity);
         });
 
-        // Select group
-        groupItem.addEventListener('click', (e) => {
+        // Select group (click on name area)
+        groupHeader.addEventListener('click', (e) => {
             if (!e.target.classList.contains('layer-group-toggle') &&
-                !e.target.classList.contains('group-opacity-slider')) {
+                !e.target.classList.contains('group-opacity-slider') &&
+                !e.target.classList.contains('group-expand-btn')) {
                 selectGroup(group.id);
             }
         });
+
+        // Drop zone for dragging layers onto groups (skip "All Layers")
+        if (!isAllLayers) {
+            groupItem.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                groupItem.classList.add('drag-over');
+            });
+
+            groupItem.addEventListener('dragleave', (e) => {
+                // Only remove class if we're leaving the group item entirely
+                if (!groupItem.contains(e.relatedTarget)) {
+                    groupItem.classList.remove('drag-over');
+                }
+            });
+
+            groupItem.addEventListener('drop', (e) => {
+                e.preventDefault();
+                groupItem.classList.remove('drag-over');
+                const layerId = e.dataTransfer.getData('text/plain');
+                if (layerId) {
+                    moveLayerToGroup(layerId, group.id);
+                }
+            });
+        }
 
         groupList.appendChild(groupItem);
     });
 
     // Auto-save state after group updates
     saveToLocalStorage();
+}
+
+/**
+ * Toggle group expanded state
+ */
+function toggleGroupExpanded(groupId, container, expandBtn) {
+    let expandedGroups = stateManager.get('expandedGroups');
+    if (!expandedGroups || typeof expandedGroups.has !== 'function') {
+        expandedGroups = new Set();
+    }
+
+    const isCurrentlyExpanded = expandedGroups.has(groupId);
+
+    if (isCurrentlyExpanded) {
+        expandedGroups.delete(groupId);
+        container.style.display = 'none';
+        expandBtn.textContent = '▶';
+        expandBtn.title = 'Expand';
+        container.parentElement.classList.remove('expanded');
+    } else {
+        expandedGroups.add(groupId);
+        const group = layerManager.layerGroups.get(groupId);
+        populateGroupLayers(container, group);
+        container.style.display = 'block';
+        expandBtn.textContent = '▼';
+        expandBtn.title = 'Collapse';
+        container.parentElement.classList.add('expanded');
+    }
+
+    stateManager.set('expandedGroups', expandedGroups, true);
+}
+
+/**
+ * Populate layers within a group container
+ */
+function populateGroupLayers(container, group) {
+    container.innerHTML = '';
+
+    if (!group) return;
+
+    const isAllLayers = group.id === stateManager.get('allLayersGroupId');
+    const layerIds = isAllLayers
+        ? layerManager.getAllLayers().map(l => l.id)
+        : (group.layerIds || []);
+
+    if (layerIds.length === 0) {
+        container.innerHTML = '<p class="empty-state nested">No layers in this group</p>';
+        return;
+    }
+
+    layerIds.forEach(layerId => {
+        const layer = layerManager.layers.get(layerId);
+        if (!layer) return;
+
+        const layerItem = document.createElement('div');
+        layerItem.className = 'nested-layer-item';
+        layerItem.dataset.layerId = layer.id;
+        layerItem.draggable = true;
+
+        layerItem.innerHTML = `
+            <span class="drag-handle" title="Drag to reorder or move to group">⠿</span>
+            <input type="checkbox" class="layer-checkbox" ${layer.visible ? 'checked' : ''}>
+            <span class="layer-name" title="${layer.name}">${layer.name}</span>
+            <span class="layer-count">${layer.features?.length || 0}</span>
+        `;
+
+        // Visibility toggle
+        layerItem.querySelector('.layer-checkbox').addEventListener('change', (e) => {
+            e.stopPropagation();
+            layerManager.toggleLayerVisibility(layer.id);
+        });
+
+        // Drag events for nested layers
+        setupLayerDragEvents(layerItem, layer.id);
+
+        container.appendChild(layerItem);
+    });
+}
+
+/**
+ * Move a layer to a different group
+ */
+function moveLayerToGroup(layerId, targetGroupId) {
+    const layer = layerManager.layers.get(layerId);
+    if (!layer) return;
+
+    // Remove from current group
+    layerManager.layerGroups.forEach((group, groupId) => {
+        if (group.layerIds && group.layerIds.includes(layerId)) {
+            group.layerIds = group.layerIds.filter(id => id !== layerId);
+            layerManager.layerGroups.set(groupId, group);
+        }
+    });
+
+    // Add to target group
+    const targetGroup = layerManager.layerGroups.get(targetGroupId);
+    if (targetGroup) {
+        if (!targetGroup.layerIds) targetGroup.layerIds = [];
+        if (!targetGroup.layerIds.includes(layerId)) {
+            targetGroup.layerIds.push(layerId);
+        }
+        layerManager.layerGroups.set(targetGroupId, targetGroup);
+    }
+
+    // Emit event and update UI
+    eventBus.emit('layer.grouped', { layerId, groupId: targetGroupId });
+    toastManager.success(`Moved "${layer.name}" to "${targetGroup?.name || 'group'}"`);
+    updateLayerGroupList();
+    updateLayerList(layerManager.getAllLayers());
 }
 
 /**
@@ -1661,9 +1823,129 @@ function updateLayerList(layers) {
         layerList.appendChild(layerItem);
     });
 
+    // Setup layer list as drop zone for reordering
+    setupLayerListDropZone(layerList);
+
     updateLegend(layers.filter(l => l.visible));
 
     // Auto-save state after layer updates
+    saveToLocalStorage();
+}
+
+/**
+ * Setup layer list as a drop zone for drag-and-drop reordering
+ */
+function setupLayerListDropZone(layerList) {
+    layerList.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        const draggingItem = document.querySelector('.layer-item.dragging');
+        if (!draggingItem) return;
+
+        const afterElement = getDragAfterElement(layerList, e.clientY);
+        if (afterElement) {
+            layerList.insertBefore(draggingItem, afterElement);
+        } else {
+            layerList.appendChild(draggingItem);
+        }
+    });
+
+    layerList.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const layerId = e.dataTransfer.getData('text/plain');
+        if (!layerId) return;
+
+        // Get new order from DOM
+        const newOrder = Array.from(layerList.querySelectorAll('.layer-item'))
+            .map(item => item.dataset.layerId);
+
+        // Update layer order in manager
+        reorderLayers(newOrder);
+    });
+}
+
+/**
+ * Get the element after which to insert the dragged item
+ */
+function getDragAfterElement(container, y) {
+    const draggableElements = [...container.querySelectorAll('.layer-item:not(.dragging)')];
+
+    return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+/**
+ * Setup drag events for a layer item
+ */
+function setupLayerDragEvents(element, layerId) {
+    element.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', layerId);
+        e.dataTransfer.effectAllowed = 'move';
+        element.classList.add('dragging');
+
+        // Create a custom drag image
+        const dragImage = element.cloneNode(true);
+        dragImage.style.opacity = '0.8';
+        dragImage.style.position = 'absolute';
+        dragImage.style.top = '-1000px';
+        document.body.appendChild(dragImage);
+        e.dataTransfer.setDragImage(dragImage, 0, 0);
+
+        // Remove the temporary drag image after drag starts
+        setTimeout(() => {
+            document.body.removeChild(dragImage);
+        }, 0);
+    });
+
+    element.addEventListener('dragend', (e) => {
+        element.classList.remove('dragging');
+        // Remove any lingering drag-over classes
+        document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+    });
+
+    element.addEventListener('dragover', (e) => {
+        e.preventDefault();
+    });
+}
+
+/**
+ * Reorder layers based on new order array
+ */
+function reorderLayers(newOrder) {
+    // Update the layer order in layerManager
+    const orderedLayers = new Map();
+
+    newOrder.forEach((layerId, index) => {
+        const layer = layerManager.layers.get(layerId);
+        if (layer) {
+            layer.order = index;
+            orderedLayers.set(layerId, layer);
+        }
+    });
+
+    // Add any layers not in newOrder (shouldn't happen but just in case)
+    layerManager.layers.forEach((layer, id) => {
+        if (!orderedLayers.has(id)) {
+            orderedLayers.set(id, layer);
+        }
+    });
+
+    layerManager.layers = orderedLayers;
+
+    // Update z-index on map
+    mapManager.updateLayerOrder(newOrder);
+
+    // Emit event
+    eventBus.emit('layer.reordered', { order: newOrder });
+
+    // Save state
     saveToLocalStorage();
 }
 
@@ -1674,16 +1956,14 @@ function createLayerItem(layer) {
     const div = document.createElement('div');
     div.className = 'layer-item';
     div.dataset.layerId = layer.id;
+    div.draggable = true;
 
     const opacity = layer.opacity !== undefined ? layer.opacity : 1.0;
     const opacityPercent = Math.round(opacity * 100);
 
     div.innerHTML = `
         <div class="layer-header">
-            <div class="layer-reorder-btns">
-                <button class="layer-move-btn" data-direction="up" title="Move layer up">▲</button>
-                <button class="layer-move-btn" data-direction="down" title="Move layer down">▼</button>
-            </div>
+            <span class="drag-handle" title="Drag to reorder or move to group">⠿</span>
             <button class="layer-expand-btn" title="Expand layer">▶</button>
             <div class="layer-info">
                 <input type="checkbox" class="layer-checkbox" ${layer.visible ? 'checked' : ''}>
@@ -1728,14 +2008,8 @@ function createLayerItem(layer) {
         layerManager.toggleLayerVisibility(layer.id);
     });
 
-    // Layer reorder buttons
-    div.querySelectorAll('.layer-move-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const direction = e.target.dataset.direction;
-            layerManager.moveLayer(layer.id, direction);
-        });
-    });
+    // Setup drag events for layer reordering
+    setupLayerDragEvents(div, layer.id);
 
     // Opacity slider
     const opacitySlider = div.querySelector('.opacity-slider');
@@ -2439,7 +2713,7 @@ function handleFeatureSelection(selectedFeature) {
 }
 
 /**
- * Update feature info panel - ONLY show Name, Description, Tier, BDM
+ * Update feature info panel - Show all CSV properties
  */
 function updateFeatureInfo(properties) {
     const featureInfo = document.getElementById('featureInfo');
@@ -2451,32 +2725,62 @@ function updateFeatureInfo(properties) {
         return;
     }
 
-    // Define which properties to display (in order)
-    const displayProps = ['name', 'description', 'tier', 'bdm'];
-    const propLabels = {
-        name: 'Name',
-        description: 'Description',
-        tier: 'Tier',
-        bdm: 'BDM'
+    // Internal/technical properties to skip (not useful for display)
+    const skipProps = ['layerId', 'wkt', 'geometry', 'latitude', 'longitude', 'lat', 'lng', 'id'];
+
+    // Priority properties to show first (if they exist)
+    const priorityProps = ['name', 'Name', 'NAME', 'description', 'Description', 'DESCRIPTION',
+                           'tier', 'Tier', 'TIER', 'bdm', 'BDM', 'Bdm'];
+
+    // Helper to format property labels nicely
+    const formatLabel = (key) => {
+        // Convert camelCase or snake_case to Title Case
+        return key
+            .replace(/([A-Z])/g, ' $1') // Add space before capitals
+            .replace(/_/g, ' ')          // Replace underscores with spaces
+            .replace(/^\s+/, '')         // Remove leading space
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+            .join(' ');
     };
 
     let hasData = false;
+    const displayedKeys = new Set();
 
-    displayProps.forEach(key => {
-        const value = properties[key] || properties[key.toLowerCase()] ||
-                     properties[key.toUpperCase()] ||
-                     properties[key.charAt(0).toUpperCase() + key.slice(1)];
-
-        if (value !== null && value !== undefined && value !== '') {
-            hasData = true;
-            const propDiv = document.createElement('div');
-            propDiv.className = 'feature-property';
-            propDiv.innerHTML = `
-                <span class="property-label">${propLabels[key]}:</span>
-                <span class="property-value">${value}</span>
-            `;
-            featureInfo.appendChild(propDiv);
+    // First, display priority properties in order (if they exist)
+    priorityProps.forEach(key => {
+        if (properties.hasOwnProperty(key) && !displayedKeys.has(key.toLowerCase())) {
+            const value = properties[key];
+            if (value !== null && value !== undefined && value !== '') {
+                hasData = true;
+                displayedKeys.add(key.toLowerCase());
+                const propDiv = document.createElement('div');
+                propDiv.className = 'feature-property';
+                propDiv.innerHTML = `
+                    <span class="property-label">${formatLabel(key)}:</span>
+                    <span class="property-value">${value}</span>
+                `;
+                featureInfo.appendChild(propDiv);
+            }
         }
+    });
+
+    // Then display all remaining properties
+    Object.entries(properties).forEach(([key, value]) => {
+        // Skip internal properties, already displayed properties, and empty values
+        if (skipProps.includes(key) || skipProps.includes(key.toLowerCase())) return;
+        if (displayedKeys.has(key.toLowerCase())) return;
+        if (value === null || value === undefined || value === '') return;
+
+        hasData = true;
+        displayedKeys.add(key.toLowerCase());
+        const propDiv = document.createElement('div');
+        propDiv.className = 'feature-property';
+        propDiv.innerHTML = `
+            <span class="property-label">${formatLabel(key)}:</span>
+            <span class="property-value">${value}</span>
+        `;
+        featureInfo.appendChild(propDiv);
     });
 
     if (!hasData) {
