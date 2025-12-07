@@ -81,6 +81,15 @@ const HeatmapOverlayPlugin = {
     api: null,
     eventUnsubscribers: [],
     uiElements: {},
+    pluginEnabled: true, // Tracks if plugin is enabled via plugin manager
+
+    /**
+     * Check if plugin is active (plugin enabled AND heatmap enabled)
+     * @returns {boolean} True if heatmap should be active
+     */
+    isActive() {
+        return this.pluginEnabled && this.config.enabled;
+    },
 
     /**
      * Initialize plugin
@@ -89,6 +98,7 @@ const HeatmapOverlayPlugin = {
     init(api) {
         console.log('[HeatmapOverlayPlugin] Initializing...');
         this.api = api;
+        this.pluginEnabled = true;
 
         // Load saved configuration
         this.loadConfig();
@@ -134,7 +144,7 @@ const HeatmapOverlayPlugin = {
     subscribeToEvents() {
         // Layer visibility changes
         const unsubVisibility = this.api.on('layer.visibility.changed', () => {
-            if (this.config.enabled) {
+            if (this.isActive()) {
                 this.updateHeatmap();
             }
         });
@@ -142,14 +152,14 @@ const HeatmapOverlayPlugin = {
 
         // Layer created/deleted
         const unsubCreated = this.api.on('layer.created', () => {
-            if (this.config.enabled) {
+            if (this.isActive()) {
                 this.updateHeatmap();
             }
         });
         this.eventUnsubscribers.push(unsubCreated);
 
         const unsubDeleted = this.api.on('layer.deleted', () => {
-            if (this.config.enabled) {
+            if (this.isActive()) {
                 this.updateHeatmap();
             }
         });
@@ -157,14 +167,14 @@ const HeatmapOverlayPlugin = {
 
         // Feature changes
         const unsubFeatureAdded = this.api.on('feature.added', () => {
-            if (this.config.enabled) {
+            if (this.isActive()) {
                 this.updateHeatmap();
             }
         });
         this.eventUnsubscribers.push(unsubFeatureAdded);
 
         const unsubFeatureDeleted = this.api.on('feature.deleted', () => {
-            if (this.config.enabled) {
+            if (this.isActive()) {
                 this.updateHeatmap();
             }
         });
@@ -172,7 +182,7 @@ const HeatmapOverlayPlugin = {
 
         // Data import
         const unsubImport = this.api.on('data.imported', () => {
-            if (this.config.enabled) {
+            if (this.isActive()) {
                 setTimeout(() => this.updateHeatmap(), 500);
             }
         });
@@ -345,7 +355,7 @@ const HeatmapOverlayPlugin = {
         enabledCheckbox.addEventListener('change', (e) => {
             this.config.enabled = e.target.checked;
             this.updateButtonState();
-            if (this.config.enabled) {
+            if (this.isActive()) {
                 this.updateHeatmap();
             } else {
                 this.removeHeatmap();
@@ -399,7 +409,7 @@ const HeatmapOverlayPlugin = {
         const applyBtn = modal.querySelector('#applyHeatmapBtn');
         applyBtn.addEventListener('click', () => {
             this.saveConfig();
-            if (this.config.enabled) {
+            if (this.isActive()) {
                 this.updateHeatmap();
             }
             this.api.showToast('Heat map settings applied', 'success');
@@ -414,6 +424,12 @@ const HeatmapOverlayPlugin = {
      * Show configuration modal
      */
     showConfigModal() {
+        // Check if plugin is enabled
+        if (!this.pluginEnabled) {
+            this.api.showToast('Plugin is disabled. Enable it from Plugins menu.', 'warning');
+            return;
+        }
+
         // Update weight property options before showing
         this.populateWeightProperties();
         this.updatePointCount();
@@ -598,6 +614,11 @@ const HeatmapOverlayPlugin = {
      * Toggle heatmap on/off
      */
     toggle() {
+        if (!this.pluginEnabled) {
+            this.api.showToast('Plugin is disabled. Enable it from Plugins menu.', 'warning');
+            return;
+        }
+
         this.config.enabled = !this.config.enabled;
         this.updateButtonState();
 
@@ -613,21 +634,41 @@ const HeatmapOverlayPlugin = {
     },
 
     /**
-     * Plugin lifecycle: called when enabled
+     * Plugin lifecycle: called when enabled via plugin manager
      */
     onEnable() {
         console.log('[HeatmapOverlayPlugin] Enabled');
+        this.pluginEnabled = true;
+
+        // Show UI elements
+        if (this.uiElements.quickButton) {
+            this.uiElements.quickButton.style.display = '';
+        }
+
+        // Restore heatmap if it was enabled before
         if (this.config.enabled) {
             this.updateHeatmap();
+            this.updateButtonState();
         }
     },
 
     /**
-     * Plugin lifecycle: called when disabled
+     * Plugin lifecycle: called when disabled via plugin manager
      */
     onDisable() {
         console.log('[HeatmapOverlayPlugin] Disabled');
+        this.pluginEnabled = false;
+
+        // Remove the heatmap layer from the map
         this.removeHeatmap();
+
+        // Hide UI elements (but keep them in DOM for re-enabling)
+        if (this.uiElements.quickButton) {
+            this.uiElements.quickButton.style.display = 'none';
+        }
+
+        // Close modal if open
+        this.hideConfigModal();
     },
 
     /**
