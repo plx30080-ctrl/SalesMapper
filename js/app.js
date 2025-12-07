@@ -74,6 +74,10 @@ function loadFromLocalStorage() {
                 if (layer.styleType && layer.styleProperty) {
                     applyPropertyBasedStyle(layer.id, layer.styleProperty, layer.styleType);
                 }
+                // Re-apply labels if they were enabled
+                if (layer.type === 'polygon' && layer.showLabels) {
+                    mapManager.togglePolygonLabels(layer.id, true, layer.features);
+                }
             });
 
             console.log('State loaded successfully from localStorage');
@@ -390,6 +394,10 @@ function setupEventListeners() {
     document.getElementById('zoomIn').addEventListener('click', () => mapManager.zoomIn());
     document.getElementById('zoomOut').addEventListener('click', () => mapManager.zoomOut());
     document.getElementById('resetView').addEventListener('click', () => mapManager.resetView());
+
+    // Polygon Edit Controls
+    document.getElementById('savePolygonEdit').addEventListener('click', savePolygonShapeEdit);
+    document.getElementById('cancelPolygonEdit').addEventListener('click', cancelPolygonShapeEdit);
 
     // Edit Modal
     document.getElementById('cancelEdit').addEventListener('click', () => modalManager.close('editModal'));
@@ -2050,9 +2058,15 @@ function populateFeaturesList(container, layer) {
                            feature.description || feature.Description ||
                            `Feature ${index + 1}`;
 
+        // Add shape edit button only for polygon layers
+        const shapeEditBtn = layer.type === 'polygon' && feature.wkt
+            ? '<button class="feature-shape-btn" title="Edit polygon shape">🔷</button>'
+            : '';
+
         featureItem.innerHTML = `
             <input type="checkbox" class="feature-checkbox" ${!feature.hidden ? 'checked' : ''} title="Toggle visibility">
             <span class="feature-name" title="${featureName}">${featureName}</span>
+            ${shapeEditBtn}
             <button class="feature-edit-btn" title="Edit feature">✏️</button>
             <button class="feature-delete-btn" title="Delete feature">🗑️</button>
         `;
@@ -2071,6 +2085,15 @@ function populateFeaturesList(container, layer) {
             e.stopPropagation();
             selectFeature(layer.id, feature);
         });
+
+        // Shape edit button (for polygons)
+        const shapeBtn = featureItem.querySelector('.feature-shape-btn');
+        if (shapeBtn) {
+            shapeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                startPolygonShapeEdit(layer.id, feature);
+            });
+        }
 
         // Edit button
         featureItem.querySelector('.feature-edit-btn').addEventListener('click', (e) => {
@@ -2268,6 +2291,17 @@ function showStyleModal(layerId) {
     document.getElementById('layerOpacitySlider').value = opacityPercent;
     document.getElementById('opacityValue').textContent = opacityPercent;
 
+    // Show/hide labels toggle based on layer type
+    const showLabelsGroup = document.getElementById('showLabelsGroup');
+    const showLabelsToggle = document.getElementById('showLabelsToggle');
+    if (layer.type === 'polygon') {
+        showLabelsGroup.style.display = 'block';
+        showLabelsToggle.checked = layer.showLabels || false;
+    } else {
+        showLabelsGroup.style.display = 'none';
+        showLabelsToggle.checked = false;
+    }
+
     modalManager.show('styleModal');
 }
 
@@ -2325,6 +2359,9 @@ function handleApplyStyle() {
     const opacityPercent = parseInt(document.getElementById('layerOpacitySlider').value);
     const opacity = opacityPercent / 100;
 
+    // Get labels toggle value (for polygon layers)
+    const showLabels = layer.type === 'polygon' ? document.getElementById('showLabelsToggle').checked : false;
+
     modalManager.close('styleModal');
     loadingManager.show('Applying style...');
 
@@ -2338,6 +2375,12 @@ function handleApplyStyle() {
 
         // Apply opacity to the layer
         layerManager.setLayerOpacity(layerId, opacity);
+
+        // Apply labels setting for polygon layers
+        if (layer.type === 'polygon') {
+            layer.showLabels = showLabels;
+            mapManager.togglePolygonLabels(layerId, showLabels, layer.features);
+        }
 
         loadingManager.hide();
         toastManager.success('Style applied successfully');
@@ -2360,6 +2403,11 @@ function applySingleColorStyle(layerId, color) {
     mapManager.removeLayer(layerId);
     mapManager.createDataSource(layerId, layer.type === 'point');
     mapManager.addFeaturesToLayer(layerId, layer.features, layer.type, color);
+
+    // Re-apply labels if they were enabled
+    if (layer.type === 'polygon' && layer.showLabels) {
+        mapManager.togglePolygonLabels(layerId, true, layer.features);
+    }
 
     layerManager.notifyUpdate();
 }
@@ -2596,6 +2644,11 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
         layer.styleType = styleType;
         layer.styleProperty = actualPropertyName;
         layer.colorMap = colorMap;
+
+        // Re-apply labels if they were enabled
+        if (layer.type === 'polygon' && layer.showLabels) {
+            mapManager.togglePolygonLabels(layerId, true, layer.features);
+        }
 
         layerManager.notifyUpdate();
 
@@ -3132,6 +3185,10 @@ async function handleLoadFromFirebase() {
                 if (layer.styleType && layer.styleProperty) {
                     applyPropertyBasedStyle(layer.id, layer.styleProperty, layer.styleType);
                 }
+                // Re-apply labels if they were enabled
+                if (layer.type === 'polygon' && layer.showLabels) {
+                    mapManager.togglePolygonLabels(layer.id, true, layer.features);
+                }
             });
 
             loadingManager.hide();
@@ -3197,6 +3254,10 @@ function enableRealtimeSync() {
                 if (layer.styleType && layer.styleProperty) {
                     applyPropertyBasedStyle(layer.id, layer.styleProperty, layer.styleType);
                 }
+                // Re-apply labels if they were enabled
+                if (layer.type === 'polygon' && layer.showLabels) {
+                    mapManager.togglePolygonLabels(layer.id, true, layer.features);
+                }
             });
 
             toastManager.show('Data synced from Firebase', 'info');
@@ -3205,6 +3266,111 @@ function enableRealtimeSync() {
 
     realtimeListenerEnabled = true;
     console.log('Real-time Firebase sync enabled');
+}
+
+/**
+ * Start editing a polygon shape
+ * @param {string} layerId - Layer ID
+ * @param {Object} feature - Feature object with wkt property
+ */
+function startPolygonShapeEdit(layerId, feature) {
+    if (!feature.wkt) {
+        toastManager.error('This feature does not have polygon data');
+        return;
+    }
+
+    // Check if already editing
+    if (mapManager.isEditingPolygon()) {
+        toastManager.warning('Already editing a polygon. Please save or cancel first.');
+        return;
+    }
+
+    // Store current editing info
+    stateManager.set('editingPolygonInfo', {
+        layerId,
+        featureId: feature.id,
+        featureName: feature.name || feature.Name || 'Polygon'
+    });
+
+    // Start the edit mode
+    const success = mapManager.startPolygonEdit(
+        layerId,
+        feature.id,
+        feature.wkt,
+        (newWkt) => handlePolygonShapeSaved(layerId, feature.id, newWkt),
+        () => handlePolygonShapeCancelled()
+    );
+
+    if (success) {
+        // Show edit controls
+        const controls = document.getElementById('polygonEditControls');
+        const label = controls.querySelector('.edit-label');
+        label.textContent = `Editing: ${feature.name || feature.Name || 'Polygon'}`;
+        controls.style.display = 'flex';
+
+        toastManager.show('Drag vertices to adjust the polygon shape. Click Save when done.', 'info');
+    } else {
+        toastManager.error('Failed to start polygon editing');
+    }
+}
+
+/**
+ * Handle polygon shape saved
+ * @param {string} layerId - Layer ID
+ * @param {string} featureId - Feature ID
+ * @param {string} newWkt - New WKT string
+ */
+function handlePolygonShapeSaved(layerId, featureId, newWkt) {
+    // Update the feature with new WKT
+    layerManager.updateFeature(layerId, featureId, { wkt: newWkt });
+
+    // Re-render the layer to show updated polygon
+    const layer = layerManager.getLayer(layerId);
+    if (layer) {
+        layerManager.rerenderLayer(layerId, layer.features);
+
+        // Re-apply labels if they were enabled
+        if (layer.showLabels) {
+            mapManager.togglePolygonLabels(layerId, true, layer.features);
+        }
+    }
+
+    // Hide edit controls
+    document.getElementById('polygonEditControls').style.display = 'none';
+    stateManager.set('editingPolygonInfo', null);
+
+    toastManager.success('Polygon shape updated');
+}
+
+/**
+ * Handle polygon shape edit cancelled
+ */
+function handlePolygonShapeCancelled() {
+    // Hide edit controls
+    document.getElementById('polygonEditControls').style.display = 'none';
+    stateManager.set('editingPolygonInfo', null);
+
+    toastManager.show('Polygon editing cancelled', 'info');
+}
+
+/**
+ * Save current polygon edit from controls
+ */
+function savePolygonShapeEdit() {
+    if (!mapManager.isEditingPolygon()) {
+        return;
+    }
+    mapManager.savePolygonEdit();
+}
+
+/**
+ * Cancel current polygon edit from controls
+ */
+function cancelPolygonShapeEdit() {
+    if (!mapManager.isEditingPolygon()) {
+        return;
+    }
+    mapManager.cancelPolygonEdit();
 }
 
 // Wait for both DOM and Google Maps to be ready

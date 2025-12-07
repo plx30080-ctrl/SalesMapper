@@ -83,6 +83,13 @@
                     <button id="resetView" class="map-btn" title="Reset View">⌂</button>
                 </div>
 
+                <!-- Polygon Edit Controls -->
+                <div id="polygonEditControls" class="polygon-edit-controls" style="display: none;">
+                    <span class="edit-label">Editing Polygon</span>
+                    <button id="savePolygonEdit" class="btn btn-primary btn-small">Save</button>
+                    <button id="cancelPolygonEdit" class="btn btn-secondary btn-small">Cancel</button>
+                </div>
+
                 <!-- Legend -->
                 <div id="mapLegend" class="map-legend">
                     <h3>Legend</h3>
@@ -348,6 +355,12 @@
                     <div class="form-group">
                         <label for="layerOpacitySlider">Opacity: <span id="opacityValue">100</span>%</label>
                         <input type="range" id="layerOpacitySlider" class="opacity-slider-wide" min="0" max="100" value="100">
+                    </div>
+                    <div class="form-group" id="showLabelsGroup" style="display: none;">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="showLabelsToggle">
+                            <span>Show Polygon Names</span>
+                        </label>
                     </div>
                     <div class="modal-actions">
                         <button id="applyStyleBtn" class="btn btn-primary">Apply Style</button>
