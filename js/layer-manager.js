@@ -509,6 +509,9 @@ class LayerManager {
         if (layer.colorMap !== undefined) {
             exported.colorMap = layer.colorMap;
         }
+        if (layer.showLabels !== undefined) {
+            exported.showLabels = layer.showLabels;
+        }
 
         return exported;
     }
@@ -559,7 +562,8 @@ class LayerManager {
                 createdAt: layerData.createdAt || new Date().toISOString(),
                 styleType: layerData.styleType,
                 styleProperty: layerData.styleProperty,
-                colorMap: layerData.colorMap
+                colorMap: layerData.colorMap,
+                showLabels: layerData.showLabels || false
             };
 
             // Store layer (don't add to layerOrder yet)

@@ -988,4 +988,278 @@ class MapManager {
             this.infoWindow.close();
         }
     }
+
+    /**
+     * Start editing a polygon shape
+     * @param {string} layerId - Layer ID
+     * @param {string} featureId - Feature ID
+     * @param {string} wkt - WKT string of the polygon
+     * @param {Function} onSave - Callback when edit is saved
+     * @param {Function} onCancel - Callback when edit is cancelled
+     */
+    startPolygonEdit(layerId, featureId, wkt, onSave, onCancel) {
+        // Store original WKT for cancel operation
+        this.editingPolygon = {
+            layerId,
+            featureId,
+            originalWkt: wkt,
+            onSave,
+            onCancel
+        };
+
+        // Parse WKT to GeoJSON to get coordinates
+        const geoJson = this.parseWKT(wkt);
+        if (!geoJson || geoJson.type !== 'Polygon') {
+            console.error('Invalid polygon WKT');
+            return false;
+        }
+
+        // Convert GeoJSON coordinates to Google Maps LatLng
+        const coordinates = geoJson.coordinates[0]; // First ring (outer boundary)
+        const path = coordinates.map(coord => ({
+            lat: coord[1],
+            lng: coord[0]
+        }));
+
+        // Get the layer to determine color
+        const layer = this.layers.get(layerId);
+        const color = layer?.color || AppConfig.colors.primary[0];
+
+        // Hide the original feature
+        this.hideFeature(layerId, featureId);
+
+        // Create editable polygon
+        this.editablePolygon = new google.maps.Polygon({
+            paths: path,
+            strokeColor: color,
+            strokeOpacity: 1,
+            strokeWeight: 3,
+            fillColor: color,
+            fillOpacity: 0.35,
+            editable: true,
+            draggable: true,
+            map: this.map
+        });
+
+        // Fit map to the polygon being edited
+        const bounds = new google.maps.LatLngBounds();
+        path.forEach(point => bounds.extend(point));
+        this.map.fitBounds(bounds, 50);
+
+        return true;
+    }
+
+    /**
+     * Save the edited polygon
+     * @returns {string} New WKT string
+     */
+    savePolygonEdit() {
+        if (!this.editablePolygon || !this.editingPolygon) {
+            return null;
+        }
+
+        // Get the edited path
+        const path = this.editablePolygon.getPath();
+        const coordinates = [];
+
+        path.forEach((latLng) => {
+            coordinates.push([latLng.lng(), latLng.lat()]);
+        });
+
+        // Close the polygon (first point = last point)
+        if (coordinates.length > 0) {
+            const first = coordinates[0];
+            const last = coordinates[coordinates.length - 1];
+            if (first[0] !== last[0] || first[1] !== last[1]) {
+                coordinates.push([first[0], first[1]]);
+            }
+        }
+
+        // Convert to WKT
+        const coordString = coordinates.map(c => `${c[0]} ${c[1]}`).join(', ');
+        const newWkt = `POLYGON((${coordString}))`;
+
+        // Clean up
+        const { layerId, featureId, onSave } = this.editingPolygon;
+        this.editablePolygon.setMap(null);
+        this.editablePolygon = null;
+
+        // Show the original feature again (it will be updated with new WKT)
+        this.showFeature(layerId, featureId);
+
+        // Call the save callback
+        if (onSave) {
+            onSave(newWkt);
+        }
+
+        this.editingPolygon = null;
+        return newWkt;
+    }
+
+    /**
+     * Cancel polygon editing
+     */
+    cancelPolygonEdit() {
+        if (!this.editablePolygon || !this.editingPolygon) {
+            return;
+        }
+
+        const { layerId, featureId, onCancel } = this.editingPolygon;
+
+        // Remove editable polygon
+        this.editablePolygon.setMap(null);
+        this.editablePolygon = null;
+
+        // Show the original feature again
+        this.showFeature(layerId, featureId);
+
+        // Call the cancel callback
+        if (onCancel) {
+            onCancel();
+        }
+
+        this.editingPolygon = null;
+    }
+
+    /**
+     * Check if currently editing a polygon
+     * @returns {boolean}
+     */
+    isEditingPolygon() {
+        return this.editablePolygon !== null && this.editablePolygon !== undefined;
+    }
+
+    /**
+     * Hide a specific feature
+     * @param {string} layerId - Layer ID
+     * @param {string} featureId - Feature ID
+     */
+    hideFeature(layerId, featureId) {
+        const dataSource = this.dataSources.get(layerId);
+        if (!dataSource || !dataSource.dataLayer) return;
+
+        const dataLayer = dataSource.dataLayer;
+        dataLayer.forEach((feature) => {
+            if (feature.getId() === featureId) {
+                // Store original style and hide
+                this.hiddenFeatureStyle = dataLayer.getStyle();
+                dataLayer.overrideStyle(feature, { visible: false });
+            }
+        });
+    }
+
+    /**
+     * Show a specific feature
+     * @param {string} layerId - Layer ID
+     * @param {string} featureId - Feature ID
+     */
+    showFeature(layerId, featureId) {
+        const dataSource = this.dataSources.get(layerId);
+        if (!dataSource || !dataSource.dataLayer) return;
+
+        const dataLayer = dataSource.dataLayer;
+        dataLayer.forEach((feature) => {
+            if (feature.getId() === featureId) {
+                // Restore visibility
+                dataLayer.revertStyle(feature);
+            }
+        });
+    }
+
+    /**
+     * Toggle polygon labels for a layer
+     * @param {string} layerId - Layer ID
+     * @param {boolean} show - Whether to show labels
+     * @param {Array} features - Features array with name property
+     */
+    togglePolygonLabels(layerId, show, features) {
+        // Initialize labels map if needed
+        if (!this.polygonLabels) {
+            this.polygonLabels = new Map();
+        }
+
+        // Remove existing labels for this layer
+        if (this.polygonLabels.has(layerId)) {
+            const labels = this.polygonLabels.get(layerId);
+            labels.forEach(label => label.setMap(null));
+            this.polygonLabels.delete(layerId);
+        }
+
+        if (!show || !features || features.length === 0) {
+            return;
+        }
+
+        const labels = [];
+        const layer = this.layers.get(layerId);
+
+        features.forEach(feature => {
+            if (!feature.wkt || !feature.name) return;
+
+            // Parse WKT to get polygon coordinates
+            const geoJson = this.parseWKT(feature.wkt);
+            if (!geoJson || geoJson.type !== 'Polygon') return;
+
+            // Calculate centroid of the polygon
+            const centroid = this.calculatePolygonCentroid(geoJson.coordinates[0]);
+            if (!centroid) return;
+
+            // Create label marker at centroid
+            const labelMarker = new google.maps.Marker({
+                position: { lat: centroid.lat, lng: centroid.lng },
+                map: this.map,
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 0,  // Invisible icon
+                    fillOpacity: 0,
+                    strokeOpacity: 0
+                },
+                label: {
+                    text: feature.name || feature.Name || '',
+                    color: '#333333',
+                    fontSize: '11px',
+                    fontWeight: '600',
+                    className: 'polygon-label'
+                },
+                clickable: false,
+                zIndex: 1000
+            });
+
+            labels.push(labelMarker);
+        });
+
+        this.polygonLabels.set(layerId, labels);
+    }
+
+    /**
+     * Calculate the centroid of a polygon
+     * @param {Array} coordinates - Array of [lng, lat] coordinates
+     * @returns {Object} { lat, lng }
+     */
+    calculatePolygonCentroid(coordinates) {
+        if (!coordinates || coordinates.length === 0) return null;
+
+        let sumLat = 0;
+        let sumLng = 0;
+        const n = coordinates.length;
+
+        // Simple centroid calculation (average of all points)
+        coordinates.forEach(coord => {
+            sumLng += coord[0];
+            sumLat += coord[1];
+        });
+
+        return {
+            lat: sumLat / n,
+            lng: sumLng / n
+        };
+    }
+
+    /**
+     * Check if a layer has labels enabled
+     * @param {string} layerId - Layer ID
+     * @returns {boolean}
+     */
+    hasLabelsEnabled(layerId) {
+        return this.polygonLabels && this.polygonLabels.has(layerId) && this.polygonLabels.get(layerId).length > 0;
+    }
 }
