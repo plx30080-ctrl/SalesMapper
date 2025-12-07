@@ -168,6 +168,9 @@ function initializePluginSystem() {
             console.log('Example plugin registered');
         }
 
+        // Restore saved plugin enabled/disabled states
+        restorePluginStates();
+
         // External API is already initialized in plugin-api.js
         // and available via window.SalesMapperAPI
         console.log('External API available via window.SalesMapperAPI');
@@ -389,6 +392,10 @@ function setupEventListeners() {
     // Firebase
     document.getElementById('saveToFirebase').addEventListener('click', handleSaveToFirebase);
     document.getElementById('loadFromFirebase').addEventListener('click', handleLoadFromFirebase);
+
+    // Plugins
+    document.getElementById('showPluginsBtn').addEventListener('click', showPluginsModal);
+    document.getElementById('closePluginsBtn').addEventListener('click', () => modalManager.close('pluginsModal'));
 
     // Map Controls
     document.getElementById('zoomIn').addEventListener('click', () => mapManager.zoomIn());
@@ -3266,6 +3273,159 @@ function enableRealtimeSync() {
 
     realtimeListenerEnabled = true;
     console.log('Real-time Firebase sync enabled');
+}
+
+/**
+ * Show the plugins management modal
+ */
+function showPluginsModal() {
+    const pluginsList = document.getElementById('pluginsList');
+    const noPluginsMessage = document.getElementById('noPluginsMessage');
+    const pluginsStats = document.getElementById('pluginsStats');
+
+    // Get all plugins
+    const plugins = pluginManager.getAllPlugins();
+
+    if (plugins.length === 0) {
+        pluginsList.style.display = 'none';
+        noPluginsMessage.style.display = 'block';
+        pluginsStats.style.display = 'none';
+    } else {
+        pluginsList.style.display = 'flex';
+        noPluginsMessage.style.display = 'none';
+        pluginsStats.style.display = 'flex';
+
+        // Populate plugins list
+        pluginsList.innerHTML = '';
+        plugins.forEach(plugin => {
+            const pluginItem = createPluginItem(plugin);
+            pluginsList.appendChild(pluginItem);
+        });
+
+        // Update stats
+        const stats = pluginManager.getStatistics();
+        pluginsStats.innerHTML = `
+            <div class="stat-item">
+                <span>Total:</span>
+                <span class="stat-value">${stats.total}</span>
+            </div>
+            <div class="stat-item">
+                <span>Active:</span>
+                <span class="stat-value">${stats.enabled}</span>
+            </div>
+            <div class="stat-item">
+                <span>Hooks:</span>
+                <span class="stat-value">${stats.hooks}</span>
+            </div>
+        `;
+    }
+
+    modalManager.show('pluginsModal');
+}
+
+/**
+ * Create a plugin item element
+ * @param {Object} plugin - Plugin object
+ * @returns {HTMLElement} Plugin item element
+ */
+function createPluginItem(plugin) {
+    const div = document.createElement('div');
+    div.className = `plugin-item ${plugin.enabled ? '' : 'disabled'}`;
+    div.dataset.pluginId = plugin.id;
+
+    div.innerHTML = `
+        <div class="plugin-info">
+            <div class="plugin-name">
+                ${plugin.name}
+                ${plugin.version ? `<span class="plugin-version">v${plugin.version}</span>` : ''}
+            </div>
+            <div class="plugin-description">${plugin.description || 'No description'}</div>
+        </div>
+        <label class="toggle-switch">
+            <input type="checkbox" ${plugin.enabled ? 'checked' : ''}>
+            <span class="toggle-slider"></span>
+        </label>
+    `;
+
+    // Add toggle handler
+    const toggle = div.querySelector('input[type="checkbox"]');
+    toggle.addEventListener('change', (e) => {
+        handlePluginToggle(plugin.id, e.target.checked);
+        div.classList.toggle('disabled', !e.target.checked);
+    });
+
+    return div;
+}
+
+/**
+ * Handle plugin toggle
+ * @param {string} pluginId - Plugin ID
+ * @param {boolean} enabled - Whether to enable the plugin
+ */
+function handlePluginToggle(pluginId, enabled) {
+    if (enabled) {
+        pluginManager.enable(pluginId);
+        toastManager.success(`Plugin enabled: ${pluginManager.getPlugin(pluginId).name}`);
+    } else {
+        pluginManager.disable(pluginId);
+        toastManager.show(`Plugin disabled: ${pluginManager.getPlugin(pluginId).name}`, 'info');
+    }
+
+    // Update stats
+    const stats = pluginManager.getStatistics();
+    const pluginsStats = document.getElementById('pluginsStats');
+    pluginsStats.innerHTML = `
+        <div class="stat-item">
+            <span>Total:</span>
+            <span class="stat-value">${stats.total}</span>
+        </div>
+        <div class="stat-item">
+            <span>Active:</span>
+            <span class="stat-value">${stats.enabled}</span>
+        </div>
+        <div class="stat-item">
+            <span>Hooks:</span>
+            <span class="stat-value">${stats.hooks}</span>
+        </div>
+    `;
+
+    // Save plugin states to localStorage
+    savePluginStates();
+}
+
+/**
+ * Save plugin enabled/disabled states to localStorage
+ */
+function savePluginStates() {
+    const plugins = pluginManager.getAllPlugins();
+    const states = {};
+    plugins.forEach(plugin => {
+        states[plugin.id] = plugin.enabled;
+    });
+    localStorage.setItem('pluginStates', JSON.stringify(states));
+}
+
+/**
+ * Restore plugin states from localStorage
+ */
+function restorePluginStates() {
+    const savedStates = localStorage.getItem('pluginStates');
+    if (!savedStates) return;
+
+    try {
+        const states = JSON.parse(savedStates);
+        Object.entries(states).forEach(([pluginId, enabled]) => {
+            if (pluginManager.hasPlugin(pluginId)) {
+                if (enabled) {
+                    pluginManager.enable(pluginId);
+                } else {
+                    pluginManager.disable(pluginId);
+                }
+            }
+        });
+    } catch (error) {
+        console.warn('Failed to restore plugin states:', error);
+    }
 }
 
 /**
