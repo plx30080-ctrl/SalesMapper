@@ -38,6 +38,9 @@
                         <button id="showFilterBtn" class="btn btn-small" title="Filter and sort layers">
                             <span>⚙️</span>Filter
                         </button>
+                        <button id="showPluginsBtn" class="btn btn-small" title="Manage plugins">
+                            <span>🔌</span>Plugins
+                        </button>
                     </div>
                 </section>
 
@@ -81,6 +84,13 @@
                     <button id="zoomIn" class="map-btn" title="Zoom In">+</button>
                     <button id="zoomOut" class="map-btn" title="Zoom Out">-</button>
                     <button id="resetView" class="map-btn" title="Reset View">⌂</button>
+                </div>
+
+                <!-- Polygon Edit Controls -->
+                <div id="polygonEditControls" class="polygon-edit-controls" style="display: none;">
+                    <span class="edit-label">Editing Polygon</span>
+                    <button id="savePolygonEdit" class="btn btn-primary btn-small">Save</button>
+                    <button id="cancelPolygonEdit" class="btn btn-secondary btn-small">Cancel</button>
                 </div>
 
                 <!-- Legend -->
@@ -349,9 +359,40 @@
                         <label for="layerOpacitySlider">Opacity: <span id="opacityValue">100</span>%</label>
                         <input type="range" id="layerOpacitySlider" class="opacity-slider-wide" min="0" max="100" value="100">
                     </div>
+                    <div class="form-group" id="showLabelsGroup" style="display: none;">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="showLabelsToggle">
+                            <span>Show Polygon Names</span>
+                        </label>
+                    </div>
                     <div class="modal-actions">
                         <button id="applyStyleBtn" class="btn btn-primary">Apply Style</button>
                         <button id="cancelStyleBtn" class="btn btn-secondary">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Plugins Modal -->
+        <div id="pluginsModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Plugins</h2>
+                    <span class="close" data-modal="pluginsModal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div id="pluginsList" class="plugins-list">
+                        <!-- Plugins will be dynamically added here -->
+                    </div>
+                    <div id="noPluginsMessage" class="empty-state" style="display: none;">
+                        <p>No plugins installed.</p>
+                        <p class="text-muted">Add plugin files to the <code>plugins/</code> folder to extend functionality.</p>
+                    </div>
+                    <div class="plugins-stats" id="pluginsStats">
+                        <!-- Stats will be added dynamically -->
+                    </div>
+                    <div class="modal-actions">
+                        <button id="closePluginsBtn" class="btn btn-secondary">Close</button>
                     </div>
                 </div>
             </div>

@@ -74,6 +74,10 @@ function loadFromLocalStorage() {
                 if (layer.styleType && layer.styleProperty) {
                     applyPropertyBasedStyle(layer.id, layer.styleProperty, layer.styleType);
                 }
+                // Re-apply labels if they were enabled
+                if (layer.type === 'polygon' && layer.showLabels) {
+                    mapManager.togglePolygonLabels(layer.id, true, layer.features);
+                }
             });
 
             console.log('State loaded successfully from localStorage');
@@ -163,6 +167,9 @@ function initializePluginSystem() {
             pluginManager.register(NearbySearchPlugin);
             console.log('Example plugin registered');
         }
+
+        // Restore saved plugin enabled/disabled states
+        restorePluginStates();
 
         // External API is already initialized in plugin-api.js
         // and available via window.SalesMapperAPI
@@ -386,10 +393,18 @@ function setupEventListeners() {
     document.getElementById('saveToFirebase').addEventListener('click', handleSaveToFirebase);
     document.getElementById('loadFromFirebase').addEventListener('click', handleLoadFromFirebase);
 
+    // Plugins
+    document.getElementById('showPluginsBtn').addEventListener('click', showPluginsModal);
+    document.getElementById('closePluginsBtn').addEventListener('click', () => modalManager.close('pluginsModal'));
+
     // Map Controls
     document.getElementById('zoomIn').addEventListener('click', () => mapManager.zoomIn());
     document.getElementById('zoomOut').addEventListener('click', () => mapManager.zoomOut());
     document.getElementById('resetView').addEventListener('click', () => mapManager.resetView());
+
+    // Polygon Edit Controls
+    document.getElementById('savePolygonEdit').addEventListener('click', savePolygonShapeEdit);
+    document.getElementById('cancelPolygonEdit').addEventListener('click', cancelPolygonShapeEdit);
 
     // Edit Modal
     document.getElementById('cancelEdit').addEventListener('click', () => modalManager.close('editModal'));
@@ -2050,9 +2065,15 @@ function populateFeaturesList(container, layer) {
                            feature.description || feature.Description ||
                            `Feature ${index + 1}`;
 
+        // Add shape edit button only for polygon layers
+        const shapeEditBtn = layer.type === 'polygon' && feature.wkt
+            ? '<button class="feature-shape-btn" title="Edit polygon shape">🔷</button>'
+            : '';
+
         featureItem.innerHTML = `
             <input type="checkbox" class="feature-checkbox" ${!feature.hidden ? 'checked' : ''} title="Toggle visibility">
             <span class="feature-name" title="${featureName}">${featureName}</span>
+            ${shapeEditBtn}
             <button class="feature-edit-btn" title="Edit feature">✏️</button>
             <button class="feature-delete-btn" title="Delete feature">🗑️</button>
         `;
@@ -2071,6 +2092,15 @@ function populateFeaturesList(container, layer) {
             e.stopPropagation();
             selectFeature(layer.id, feature);
         });
+
+        // Shape edit button (for polygons)
+        const shapeBtn = featureItem.querySelector('.feature-shape-btn');
+        if (shapeBtn) {
+            shapeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                startPolygonShapeEdit(layer.id, feature);
+            });
+        }
 
         // Edit button
         featureItem.querySelector('.feature-edit-btn').addEventListener('click', (e) => {
@@ -2268,6 +2298,17 @@ function showStyleModal(layerId) {
     document.getElementById('layerOpacitySlider').value = opacityPercent;
     document.getElementById('opacityValue').textContent = opacityPercent;
 
+    // Show/hide labels toggle based on layer type
+    const showLabelsGroup = document.getElementById('showLabelsGroup');
+    const showLabelsToggle = document.getElementById('showLabelsToggle');
+    if (layer.type === 'polygon') {
+        showLabelsGroup.style.display = 'block';
+        showLabelsToggle.checked = layer.showLabels || false;
+    } else {
+        showLabelsGroup.style.display = 'none';
+        showLabelsToggle.checked = false;
+    }
+
     modalManager.show('styleModal');
 }
 
@@ -2325,6 +2366,9 @@ function handleApplyStyle() {
     const opacityPercent = parseInt(document.getElementById('layerOpacitySlider').value);
     const opacity = opacityPercent / 100;
 
+    // Get labels toggle value (for polygon layers)
+    const showLabels = layer.type === 'polygon' ? document.getElementById('showLabelsToggle').checked : false;
+
     modalManager.close('styleModal');
     loadingManager.show('Applying style...');
 
@@ -2338,6 +2382,12 @@ function handleApplyStyle() {
 
         // Apply opacity to the layer
         layerManager.setLayerOpacity(layerId, opacity);
+
+        // Apply labels setting for polygon layers
+        if (layer.type === 'polygon') {
+            layer.showLabels = showLabels;
+            mapManager.togglePolygonLabels(layerId, showLabels, layer.features);
+        }
 
         loadingManager.hide();
         toastManager.success('Style applied successfully');
@@ -2360,6 +2410,11 @@ function applySingleColorStyle(layerId, color) {
     mapManager.removeLayer(layerId);
     mapManager.createDataSource(layerId, layer.type === 'point');
     mapManager.addFeaturesToLayer(layerId, layer.features, layer.type, color);
+
+    // Re-apply labels if they were enabled
+    if (layer.type === 'polygon' && layer.showLabels) {
+        mapManager.togglePolygonLabels(layerId, true, layer.features);
+    }
 
     layerManager.notifyUpdate();
 }
@@ -2596,6 +2651,11 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
         layer.styleType = styleType;
         layer.styleProperty = actualPropertyName;
         layer.colorMap = colorMap;
+
+        // Re-apply labels if they were enabled
+        if (layer.type === 'polygon' && layer.showLabels) {
+            mapManager.togglePolygonLabels(layerId, true, layer.features);
+        }
 
         layerManager.notifyUpdate();
 
@@ -3132,6 +3192,10 @@ async function handleLoadFromFirebase() {
                 if (layer.styleType && layer.styleProperty) {
                     applyPropertyBasedStyle(layer.id, layer.styleProperty, layer.styleType);
                 }
+                // Re-apply labels if they were enabled
+                if (layer.type === 'polygon' && layer.showLabels) {
+                    mapManager.togglePolygonLabels(layer.id, true, layer.features);
+                }
             });
 
             loadingManager.hide();
@@ -3197,6 +3261,10 @@ function enableRealtimeSync() {
                 if (layer.styleType && layer.styleProperty) {
                     applyPropertyBasedStyle(layer.id, layer.styleProperty, layer.styleType);
                 }
+                // Re-apply labels if they were enabled
+                if (layer.type === 'polygon' && layer.showLabels) {
+                    mapManager.togglePolygonLabels(layer.id, true, layer.features);
+                }
             });
 
             toastManager.show('Data synced from Firebase', 'info');
@@ -3205,6 +3273,264 @@ function enableRealtimeSync() {
 
     realtimeListenerEnabled = true;
     console.log('Real-time Firebase sync enabled');
+}
+
+/**
+ * Show the plugins management modal
+ */
+function showPluginsModal() {
+    const pluginsList = document.getElementById('pluginsList');
+    const noPluginsMessage = document.getElementById('noPluginsMessage');
+    const pluginsStats = document.getElementById('pluginsStats');
+
+    // Get all plugins
+    const plugins = pluginManager.getAllPlugins();
+
+    if (plugins.length === 0) {
+        pluginsList.style.display = 'none';
+        noPluginsMessage.style.display = 'block';
+        pluginsStats.style.display = 'none';
+    } else {
+        pluginsList.style.display = 'flex';
+        noPluginsMessage.style.display = 'none';
+        pluginsStats.style.display = 'flex';
+
+        // Populate plugins list
+        pluginsList.innerHTML = '';
+        plugins.forEach(plugin => {
+            const pluginItem = createPluginItem(plugin);
+            pluginsList.appendChild(pluginItem);
+        });
+
+        // Update stats
+        const stats = pluginManager.getStatistics();
+        pluginsStats.innerHTML = `
+            <div class="stat-item">
+                <span>Total:</span>
+                <span class="stat-value">${stats.total}</span>
+            </div>
+            <div class="stat-item">
+                <span>Active:</span>
+                <span class="stat-value">${stats.enabled}</span>
+            </div>
+            <div class="stat-item">
+                <span>Hooks:</span>
+                <span class="stat-value">${stats.hooks}</span>
+            </div>
+        `;
+    }
+
+    modalManager.show('pluginsModal');
+}
+
+/**
+ * Create a plugin item element
+ * @param {Object} plugin - Plugin object
+ * @returns {HTMLElement} Plugin item element
+ */
+function createPluginItem(plugin) {
+    const div = document.createElement('div');
+    div.className = `plugin-item ${plugin.enabled ? '' : 'disabled'}`;
+    div.dataset.pluginId = plugin.id;
+
+    div.innerHTML = `
+        <div class="plugin-info">
+            <div class="plugin-name">
+                ${plugin.name}
+                ${plugin.version ? `<span class="plugin-version">v${plugin.version}</span>` : ''}
+            </div>
+            <div class="plugin-description">${plugin.description || 'No description'}</div>
+        </div>
+        <label class="toggle-switch">
+            <input type="checkbox" ${plugin.enabled ? 'checked' : ''}>
+            <span class="toggle-slider"></span>
+        </label>
+    `;
+
+    // Add toggle handler
+    const toggle = div.querySelector('input[type="checkbox"]');
+    toggle.addEventListener('change', (e) => {
+        handlePluginToggle(plugin.id, e.target.checked);
+        div.classList.toggle('disabled', !e.target.checked);
+    });
+
+    return div;
+}
+
+/**
+ * Handle plugin toggle
+ * @param {string} pluginId - Plugin ID
+ * @param {boolean} enabled - Whether to enable the plugin
+ */
+function handlePluginToggle(pluginId, enabled) {
+    if (enabled) {
+        pluginManager.enable(pluginId);
+        toastManager.success(`Plugin enabled: ${pluginManager.getPlugin(pluginId).name}`);
+    } else {
+        pluginManager.disable(pluginId);
+        toastManager.show(`Plugin disabled: ${pluginManager.getPlugin(pluginId).name}`, 'info');
+    }
+
+    // Update stats
+    const stats = pluginManager.getStatistics();
+    const pluginsStats = document.getElementById('pluginsStats');
+    pluginsStats.innerHTML = `
+        <div class="stat-item">
+            <span>Total:</span>
+            <span class="stat-value">${stats.total}</span>
+        </div>
+        <div class="stat-item">
+            <span>Active:</span>
+            <span class="stat-value">${stats.enabled}</span>
+        </div>
+        <div class="stat-item">
+            <span>Hooks:</span>
+            <span class="stat-value">${stats.hooks}</span>
+        </div>
+    `;
+
+    // Save plugin states to localStorage
+    savePluginStates();
+}
+
+/**
+ * Save plugin enabled/disabled states to localStorage
+ */
+function savePluginStates() {
+    const plugins = pluginManager.getAllPlugins();
+    const states = {};
+    plugins.forEach(plugin => {
+        states[plugin.id] = plugin.enabled;
+    });
+    localStorage.setItem('pluginStates', JSON.stringify(states));
+}
+
+/**
+ * Restore plugin states from localStorage
+ */
+function restorePluginStates() {
+    const savedStates = localStorage.getItem('pluginStates');
+    if (!savedStates) return;
+
+    try {
+        const states = JSON.parse(savedStates);
+        Object.entries(states).forEach(([pluginId, enabled]) => {
+            if (pluginManager.hasPlugin(pluginId)) {
+                if (enabled) {
+                    pluginManager.enable(pluginId);
+                } else {
+                    pluginManager.disable(pluginId);
+                }
+            }
+        });
+    } catch (error) {
+        console.warn('Failed to restore plugin states:', error);
+    }
+}
+
+/**
+ * Start editing a polygon shape
+ * @param {string} layerId - Layer ID
+ * @param {Object} feature - Feature object with wkt property
+ */
+function startPolygonShapeEdit(layerId, feature) {
+    if (!feature.wkt) {
+        toastManager.error('This feature does not have polygon data');
+        return;
+    }
+
+    // Check if already editing
+    if (mapManager.isEditingPolygon()) {
+        toastManager.warning('Already editing a polygon. Please save or cancel first.');
+        return;
+    }
+
+    // Store current editing info
+    stateManager.set('editingPolygonInfo', {
+        layerId,
+        featureId: feature.id,
+        featureName: feature.name || feature.Name || 'Polygon'
+    });
+
+    // Start the edit mode
+    const success = mapManager.startPolygonEdit(
+        layerId,
+        feature.id,
+        feature.wkt,
+        (newWkt) => handlePolygonShapeSaved(layerId, feature.id, newWkt),
+        () => handlePolygonShapeCancelled()
+    );
+
+    if (success) {
+        // Show edit controls
+        const controls = document.getElementById('polygonEditControls');
+        const label = controls.querySelector('.edit-label');
+        label.textContent = `Editing: ${feature.name || feature.Name || 'Polygon'}`;
+        controls.style.display = 'flex';
+
+        toastManager.show('Drag vertices to adjust the polygon shape. Click Save when done.', 'info');
+    } else {
+        toastManager.error('Failed to start polygon editing');
+    }
+}
+
+/**
+ * Handle polygon shape saved
+ * @param {string} layerId - Layer ID
+ * @param {string} featureId - Feature ID
+ * @param {string} newWkt - New WKT string
+ */
+function handlePolygonShapeSaved(layerId, featureId, newWkt) {
+    // Update the feature with new WKT
+    layerManager.updateFeature(layerId, featureId, { wkt: newWkt });
+
+    // Re-render the layer to show updated polygon
+    const layer = layerManager.getLayer(layerId);
+    if (layer) {
+        layerManager.rerenderLayer(layerId, layer.features);
+
+        // Re-apply labels if they were enabled
+        if (layer.showLabels) {
+            mapManager.togglePolygonLabels(layerId, true, layer.features);
+        }
+    }
+
+    // Hide edit controls
+    document.getElementById('polygonEditControls').style.display = 'none';
+    stateManager.set('editingPolygonInfo', null);
+
+    toastManager.success('Polygon shape updated');
+}
+
+/**
+ * Handle polygon shape edit cancelled
+ */
+function handlePolygonShapeCancelled() {
+    // Hide edit controls
+    document.getElementById('polygonEditControls').style.display = 'none';
+    stateManager.set('editingPolygonInfo', null);
+
+    toastManager.show('Polygon editing cancelled', 'info');
+}
+
+/**
+ * Save current polygon edit from controls
+ */
+function savePolygonShapeEdit() {
+    if (!mapManager.isEditingPolygon()) {
+        return;
+    }
+    mapManager.savePolygonEdit();
+}
+
+/**
+ * Cancel current polygon edit from controls
+ */
+function cancelPolygonShapeEdit() {
+    if (!mapManager.isEditingPolygon()) {
+        return;
+    }
+    mapManager.cancelPolygonEdit();
 }
 
 // Wait for both DOM and Google Maps to be ready
