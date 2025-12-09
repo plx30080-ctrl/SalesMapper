@@ -34,7 +34,8 @@ const HeatmapOverlayPlugin = {
         maxIntensity: 10,
         dissipating: true,
         weightProperty: null, // Property to use for weighted heatmap (e.g., 'revenue')
-        gradient: null // Custom gradient (null uses default)
+        gradient: null, // Custom gradient (null uses default)
+        hideMarkersWhenActive: true // Hide point markers when heatmap is shown
     },
 
     // Predefined gradient options
@@ -82,6 +83,7 @@ const HeatmapOverlayPlugin = {
     eventUnsubscribers: [],
     uiElements: {},
     pluginEnabled: true, // Tracks if plugin is enabled via plugin manager
+    hiddenLayerIds: [], // Track layers whose markers we've hidden
 
     /**
      * Check if plugin is active (plugin enabled AND heatmap enabled)
@@ -313,6 +315,14 @@ const HeatmapOverlayPlugin = {
                         <small class="form-hint">When enabled, radius adjusts based on zoom level</small>
                     </div>
 
+                    <div class="form-group">
+                        <label class="toggle-label">
+                            <input type="checkbox" id="heatmapHideMarkers" ${this.config.hideMarkersWhenActive ? 'checked' : ''}>
+                            <span class="toggle-text">Hide markers when active</span>
+                        </label>
+                        <small class="form-hint">Hide point markers to show only the heatmap overlay</small>
+                    </div>
+
                     <div class="heatmap-stats" id="heatmapStats">
                         <p>Points in heatmap: <strong id="heatmapPointCount">0</strong></p>
                     </div>
@@ -403,6 +413,20 @@ const HeatmapOverlayPlugin = {
         const dissipatingCheckbox = modal.querySelector('#heatmapDissipating');
         dissipatingCheckbox.addEventListener('change', (e) => {
             this.config.dissipating = e.target.checked;
+        });
+
+        // Hide markers checkbox
+        const hideMarkersCheckbox = modal.querySelector('#heatmapHideMarkers');
+        hideMarkersCheckbox.addEventListener('change', (e) => {
+            this.config.hideMarkersWhenActive = e.target.checked;
+            // Immediately apply the change if heatmap is active
+            if (this.isActive()) {
+                if (this.config.hideMarkersWhenActive) {
+                    this.hidePointLayerMarkers();
+                } else {
+                    this.showPointLayerMarkers();
+                }
+            }
         });
 
         // Apply button
@@ -593,6 +617,9 @@ const HeatmapOverlayPlugin = {
             });
         }
 
+        // Hide markers if configured
+        this.hidePointLayerMarkers();
+
         // Update point count
         this.updatePointCount();
 
@@ -607,7 +634,80 @@ const HeatmapOverlayPlugin = {
             this.heatmapLayer.setMap(null);
             this.heatmapLayer = null;
         }
+
+        // Restore markers if we hid them
+        this.showPointLayerMarkers();
+
         this.updatePointCount();
+    },
+
+    /**
+     * Hide markers for visible point layers
+     */
+    hidePointLayerMarkers() {
+        if (!this.config.hideMarkersWhenActive) return;
+
+        const mapManager = this.api.getState('mapManager');
+        if (!mapManager) return;
+
+        const layers = this.api.getAllLayers();
+        this.hiddenLayerIds = [];
+
+        layers.forEach(layer => {
+            // Only hide markers for visible point layers
+            if (layer.visible && layer.type === 'point') {
+                const mapLayer = mapManager.layers.get(layer.id);
+                if (mapLayer) {
+                    // Hide clusterer if present
+                    if (mapLayer.clusterer) {
+                        mapLayer.clusterer.setMap(null);
+                    }
+                    // Hide individual markers
+                    if (mapLayer.markers) {
+                        mapLayer.markers.forEach(marker => marker.setMap(null));
+                    }
+                    this.hiddenLayerIds.push(layer.id);
+                }
+            }
+        });
+
+        if (this.hiddenLayerIds.length > 0) {
+            console.log(`[HeatmapOverlayPlugin] Hidden markers for ${this.hiddenLayerIds.length} layer(s)`);
+        }
+    },
+
+    /**
+     * Show markers for layers we previously hid
+     */
+    showPointLayerMarkers() {
+        if (this.hiddenLayerIds.length === 0) return;
+
+        const mapManager = this.api.getState('mapManager');
+        if (!mapManager) return;
+
+        const map = this.api.getMap();
+        const layers = this.api.getAllLayers();
+
+        this.hiddenLayerIds.forEach(layerId => {
+            const layer = layers.find(l => l.id === layerId);
+            // Only restore if layer is still visible
+            if (layer && layer.visible) {
+                const mapLayer = mapManager.layers.get(layerId);
+                if (mapLayer) {
+                    // Show clusterer if present
+                    if (mapLayer.clusterer) {
+                        mapLayer.clusterer.setMap(map);
+                    }
+                    // Show individual markers
+                    if (mapLayer.markers) {
+                        mapLayer.markers.forEach(marker => marker.setMap(map));
+                    }
+                }
+            }
+        });
+
+        console.log(`[HeatmapOverlayPlugin] Restored markers for ${this.hiddenLayerIds.length} layer(s)`);
+        this.hiddenLayerIds = [];
     },
 
     /**

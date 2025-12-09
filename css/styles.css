@@ -193,11 +193,13 @@ body {
 /* ===== Quick Actions ===== */
 .quick-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.5rem;
 }
 
 .quick-actions .btn {
-    flex: 1;
+    flex: 1 1 calc(33.333% - 0.35rem);
+    min-width: 0;
     padding: 0.625rem 0.5rem;
     font-size: 0.8rem;
     border-radius: var(--radius);
