@@ -212,6 +212,19 @@ function setupEventBusSubscriptions() {
         updateLayerList(layerManager.getAllLayers());
     });
 
+    // Layer renamed event
+    eventBus.on('layer.renamed', ({ layerId, oldName, newName }) => {
+        console.log('Layer renamed:', oldName, '->', newName);
+        updateLayerList(layerManager.getAllLayers());
+        updateLayerGroupList();
+    });
+
+    // Feature moved event
+    eventBus.on('feature.moved', ({ featureId, sourceLayerId, targetLayerId }) => {
+        console.log('Feature moved:', featureId, 'from', sourceLayerId, 'to', targetLayerId);
+        updateLayerList(layerManager.getAllLayers());
+    });
+
     // Feature events
     eventBus.on('feature.updated', ({ layerId, featureId }) => {
         console.log('Feature updated:', featureId);
@@ -452,6 +465,20 @@ function setupEventListeners() {
     document.getElementById('importValidDataBtn').addEventListener('click', handleImportValidData);
     document.getElementById('downloadErrorsBtn').addEventListener('click', handleDownloadErrors);
     document.getElementById('closeValidationBtn').addEventListener('click', () => modalManager.close('validationModal'));
+
+    // Rename Layer Modal
+    document.getElementById('confirmRenameBtn').addEventListener('click', handleRenameLayer);
+    document.getElementById('cancelRenameBtn').addEventListener('click', () => modalManager.close('renameLayerModal'));
+    document.getElementById('newLayerName').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleRenameLayer();
+        }
+    });
+
+    // Move Feature Modal
+    document.getElementById('confirmMoveBtn').addEventListener('click', handleMoveFeature);
+    document.getElementById('cancelMoveBtn').addEventListener('click', () => modalManager.close('moveFeatureModal'));
 
     // Modal close buttons
     document.querySelectorAll('.close').forEach(btn => {
@@ -2075,6 +2102,7 @@ function populateFeaturesList(container, layer) {
             <span class="feature-name" title="${featureName}">${featureName}</span>
             ${shapeEditBtn}
             <button class="feature-edit-btn" title="Edit feature">✏️</button>
+            <button class="feature-move-btn" title="Move to another layer">↗️</button>
             <button class="feature-delete-btn" title="Delete feature">🗑️</button>
         `;
 
@@ -2106,6 +2134,12 @@ function populateFeaturesList(container, layer) {
         featureItem.querySelector('.feature-edit-btn').addEventListener('click', (e) => {
             e.stopPropagation();
             editFeature(layer.id, feature);
+        });
+
+        // Move button
+        featureItem.querySelector('.feature-move-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            showMoveFeatureModal(layer.id, feature.id, featureName);
         });
 
         // Delete button
@@ -2242,6 +2276,10 @@ function handleLayerAction(e) {
             toastManager.success(`Layer "${layer.name}" exported`);
             break;
 
+        case 'rename':
+            showRenameLayerModal(layerId, layer.name);
+            break;
+
         case 'group':
             showMoveToGroupDialog(layerId);
             break;
@@ -2254,6 +2292,107 @@ function handleLayerAction(e) {
             }
             break;
     }
+}
+
+/**
+ * Show rename layer modal
+ */
+function showRenameLayerModal(layerId, currentName) {
+    currentLayerForActions = layerId;
+    const input = document.getElementById('newLayerName');
+    input.value = currentName;
+    modalManager.show('renameLayerModal');
+    // Focus the input after modal is shown
+    setTimeout(() => input.select(), 100);
+}
+
+/**
+ * Handle rename layer confirmation
+ */
+function handleRenameLayer() {
+    const layerId = currentLayerForActions;
+    const newName = document.getElementById('newLayerName').value.trim();
+
+    if (!newName) {
+        toastManager.warning('Please enter a valid name');
+        return;
+    }
+
+    const layer = layerManager.getLayer(layerId);
+    if (!layer) return;
+
+    if (layerManager.renameLayer(layerId, newName)) {
+        toastManager.success(`Layer renamed to "${newName}"`);
+        renderLayerPanel();
+    }
+
+    modalManager.close('renameLayerModal');
+}
+
+/**
+ * Show move feature to layer modal
+ */
+function showMoveFeatureModal(sourceLayerId, featureId, featureName) {
+    window.moveFeatureContext = { sourceLayerId, featureId };
+
+    // Update info text
+    document.getElementById('moveFeatureInfo').textContent =
+        `Moving "${featureName}" to another layer:`;
+
+    // Populate target layer dropdown
+    const select = document.getElementById('targetLayerSelect');
+    select.innerHTML = '';
+
+    const sourceLayer = layerManager.getLayer(sourceLayerId);
+    const allLayers = layerManager.getAllLayers();
+
+    // Filter to same type layers (point -> point, polygon -> polygon)
+    const compatibleLayers = allLayers.filter(l =>
+        l.id !== sourceLayerId && l.type === sourceLayer.type
+    );
+
+    if (compatibleLayers.length === 0) {
+        select.innerHTML = '<option value="">No compatible layers available</option>';
+        document.getElementById('confirmMoveBtn').disabled = true;
+    } else {
+        compatibleLayers.forEach(layer => {
+            const option = document.createElement('option');
+            option.value = layer.id;
+            option.textContent = `${layer.name} (${layer.features.length} features)`;
+            select.appendChild(option);
+        });
+        document.getElementById('confirmMoveBtn').disabled = false;
+    }
+
+    modalManager.show('moveFeatureModal');
+}
+
+/**
+ * Handle move feature confirmation
+ */
+function handleMoveFeature() {
+    const { sourceLayerId, featureId } = window.moveFeatureContext || {};
+    const targetLayerId = document.getElementById('targetLayerSelect').value;
+
+    if (!sourceLayerId || !featureId || !targetLayerId) {
+        toastManager.warning('Please select a target layer');
+        return;
+    }
+
+    const sourceLayer = layerManager.getLayer(sourceLayerId);
+    const targetLayer = layerManager.getLayer(targetLayerId);
+    const feature = sourceLayer?.features.find(f => f.id === featureId);
+
+    if (layerManager.moveFeatureToLayer(sourceLayerId, featureId, targetLayerId)) {
+        const featureName = feature?.name || feature?.Name || 'Feature';
+        toastManager.success(`"${featureName}" moved to "${targetLayer.name}"`);
+        renderLayerPanel();
+    } else {
+        toastManager.error('Failed to move feature');
+    }
+
+    modalManager.close('moveFeatureModal');
+    window.moveFeatureContext = null;
 }
 
 /**

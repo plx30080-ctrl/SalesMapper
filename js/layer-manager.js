@@ -151,6 +151,80 @@ class LayerManager {
     }
 
     /**
+     * Rename a layer
+     * @param {string} layerId - Layer ID
+     * @param {string} newName - New layer name
+     */
+    renameLayer(layerId, newName) {
+        const layers = this.layers;
+        const layer = layers.get(layerId);
+        if (!layer) return false;
+
+        const oldName = layer.name;
+        layer.name = newName;
+        layers.set(layerId, layer);
+        this.layers = layers;
+
+        // Emit event
+        eventBus.emit('layer.renamed', { layerId, oldName, newName });
+
+        return true;
+    }
+
+    /**
+     * Move a feature from one layer to another
+     * @param {string} sourceLayerId - Source layer ID
+     * @param {string} featureId - Feature ID to move
+     * @param {string} targetLayerId - Target layer ID
+     * @returns {boolean} Success status
+     */
+    moveFeatureToLayer(sourceLayerId, featureId, targetLayerId) {
+        const layers = this.layers;
+        const sourceLayer = layers.get(sourceLayerId);
+        const targetLayer = layers.get(targetLayerId);
+
+        if (!sourceLayer || !targetLayer) {
+            console.error('Source or target layer not found');
+            return false;
+        }
+
+        // Find the feature in source layer
+        const featureIndex = sourceLayer.features.findIndex(f => f.id === featureId);
+        if (featureIndex === -1) {
+            console.error(`Feature ${featureId} not found in source layer`);
+            return false;
+        }
+
+        // Get the feature
+        const feature = sourceLayer.features[featureIndex];
+
+        // Remove from source layer data
+        sourceLayer.features.splice(featureIndex, 1);
+        layers.set(sourceLayerId, sourceLayer);
+
+        // Add to target layer data
+        targetLayer.features.push(feature);
+        layers.set(targetLayerId, targetLayer);
+        this.layers = layers;
+
+        // Remove from source map layer
+        this.mapManager.removeFeature(sourceLayerId, featureId);
+
+        // Add to target map layer
+        this.mapManager.addFeaturesToLayer(targetLayerId, [feature], targetLayer.type, targetLayer.color);
+
+        // Emit events
+        eventBus.emit('feature.moved', {
+            featureId,
+            sourceLayerId,
+            targetLayerId,
+            feature
+        });
+
+        return true;
+    }
+
+    /**
      * Delete a layer
      * @param {string} layerId - Layer ID
      */
