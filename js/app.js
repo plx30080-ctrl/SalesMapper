@@ -2439,8 +2439,9 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
             }
         }
 
-        // Get unique values for the property
-        const uniqueValues = [...new Set(layer.features.map(f => f[actualPropertyName]))].filter(v => v != null);
+        // Get unique values for the property (filter out null, undefined, and empty strings)
+        const uniqueValues = [...new Set(layer.features.map(f => f[actualPropertyName]))]
+            .filter(v => v != null && v !== '');
 
         console.log('=== PROPERTY STYLING DEBUG ===');
         console.log('Property to style by:', property);
