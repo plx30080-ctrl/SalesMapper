@@ -320,11 +320,55 @@
         <!-- Layer Actions Menu -->
         <div id="layerActionsMenu" class="context-menu">
             <button class="context-menu-item" data-action="add">➕ Add Feature</button>
+            <button class="context-menu-item" data-action="rename">✏️ Rename Layer</button>
             <button class="context-menu-item" data-action="zoom">🔍 Zoom to Layer</button>
             <button class="context-menu-item" data-action="style">🎨 Style Options</button>
             <button class="context-menu-item" data-action="export">📥 Export to CSV</button>
             <button class="context-menu-item" data-action="group">📁 Move to Group</button>
             <button class="context-menu-item" data-action="delete">🗑️ Delete Layer</button>
+        </div>
+
+        <!-- Rename Layer Modal -->
+        <div id="renameLayerModal" class="modal">
+            <div class="modal-content modal-small">
+                <div class="modal-header">
+                    <h2>Rename Layer</h2>
+                    <span class="close" data-modal="renameLayerModal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="newLayerName">New Name:</label>
+                        <input type="text" id="newLayerName" class="form-input" placeholder="Enter new layer name..." />
+                    </div>
+                    <div class="modal-actions">
+                        <button id="confirmRenameBtn" class="btn btn-primary">Rename</button>
+                        <button id="cancelRenameBtn" class="btn btn-secondary">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Move Feature to Layer Modal -->
+        <div id="moveFeatureModal" class="modal">
+            <div class="modal-content modal-small">
+                <div class="modal-header">
+                    <h2>Move Feature to Layer</h2>
+                    <span class="close" data-modal="moveFeatureModal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <p id="moveFeatureInfo" class="text-muted">Select target layer:</p>
+                    <div class="form-group">
+                        <label for="targetLayerSelect">Target Layer:</label>
+                        <select id="targetLayerSelect" class="form-select">
+                            <!-- Options will be populated dynamically -->
+                        </select>
+                    </div>
+                    <div class="modal-actions">
+                        <button id="confirmMoveBtn" class="btn btn-primary">Move</button>
+                        <button id="cancelMoveBtn" class="btn btn-secondary">Cancel</button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Style Options Modal -->

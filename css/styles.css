@@ -193,11 +193,13 @@ body {
 /* ===== Quick Actions ===== */
 .quick-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.5rem;
 }
 
 .quick-actions .btn {
-    flex: 1;
+    flex: 1 1 calc(33.333% - 0.35rem);
+    min-width: 0;
     padding: 0.625rem 0.5rem;
     font-size: 0.8rem;
     border-radius: var(--radius);
@@ -687,6 +689,7 @@ body {
 }
 
 .feature-edit-btn,
+.feature-move-btn,
 .feature-delete-btn {
     background: none;
     border: none;
@@ -703,6 +706,11 @@ body {
 .feature-edit-btn:hover {
     opacity: 1;
     background-color: var(--primary-light);
+}
+
+.feature-move-btn:hover {
+    opacity: 1;
+    background-color: var(--info-light, rgba(0, 120, 212, 0.15));
 }
 
 .feature-delete-btn:hover {
@@ -1788,6 +1796,10 @@ body {
 .modal-large {
     max-width: 700px;
     max-height: 85vh;
+}
+
+.modal-small {
+    max-width: 400px;
 }
 
 .validation-summary {
