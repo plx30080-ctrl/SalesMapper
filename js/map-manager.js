@@ -797,6 +797,24 @@ class MapManager {
     }
 
     /**
+     * Clear all layers from map
+     */
+    clearMap() {
+        // Get all layer IDs
+        const layerIds = Array.from(this.layers.keys());
+
+        // Remove each layer
+        layerIds.forEach(layerId => {
+            this.removeLayer(layerId);
+        });
+
+        // Clear selected feature
+        this.clearSelectedFeature();
+
+        console.log('Map cleared');
+    }
+
+    /**
      * Update feature properties
      * @param {string} layerId - Layer ID
      * @param {string} featureId - Feature ID
