@@ -258,6 +258,30 @@ class LayerManager {
     }
 
     /**
+     * Clear all layers
+     */
+    clearAllLayers() {
+        // Get all layer IDs
+        const layerIds = Array.from(this.layers.keys());
+
+        // Delete each layer
+        layerIds.forEach(layerId => {
+            this.mapManager.removeLayer(layerId);
+        });
+
+        // Clear all storage
+        this.layers = new Map();
+        this.layerOrder = [];
+        this.activeFilters.clear();
+        this.activeSorts.clear();
+
+        // Emit event
+        eventBus.emit('layers.cleared');
+
+        console.log('All layers cleared');
+    }
+
+    /**
      * Get layer by ID
      * @param {string} layerId - Layer ID
      * @returns {Object} Layer data

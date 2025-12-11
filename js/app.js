@@ -12,6 +12,8 @@ let geocodingService;
 // Global state for UI interactions
 let currentLayerForActions = null;  // Currently selected layer for context menu actions
 let currentCSVData = null;          // Currently loaded CSV data for import workflow
+let realtimeListenerEnabled = false; // Firebase real-time sync status
+let allLayersGroupId = null;         // ID of the default "All Layers" group
 
 // Data services are initialized in initDataServices()
 // Access via: storageService, firebaseService, dataSyncService
