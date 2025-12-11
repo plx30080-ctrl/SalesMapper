@@ -220,12 +220,14 @@ class StateManager {
                 timestamp: Utils.formatDate()
             };
 
-            localStorage.setItem(AppConfig.storage.localStorageKey, JSON.stringify(stateData));
+            // Use profile-aware storage key
+            const storageKey = this.getProfileStorageKey();
+            localStorage.setItem(storageKey, JSON.stringify(stateData));
 
             this.state.isDirty = false;
             this.state.lastSaved = Utils.formatDate();
 
-            console.log('State saved to localStorage');
+            console.log(`State saved to localStorage for profile: ${this.state.currentProfile?.id || 'default'}`);
             return true;
         } catch (error) {
             console.error('Error saving state to localStorage:', error);
@@ -239,14 +241,16 @@ class StateManager {
      */
     loadFromLocalStorage() {
         try {
-            const saved = localStorage.getItem(AppConfig.storage.localStorageKey);
+            // Use profile-aware storage key
+            const storageKey = this.getProfileStorageKey();
+            const saved = localStorage.getItem(storageKey);
             if (!saved) {
-                console.log('No saved state found in localStorage');
+                console.log(`No saved state found in localStorage for profile: ${this.state.currentProfile?.id || 'default'}`);
                 return null;
             }
 
             const stateData = JSON.parse(saved);
-            console.log('State loaded from localStorage:', stateData);
+            console.log(`State loaded from localStorage for profile: ${this.state.currentProfile?.id || 'default'}:`, stateData);
 
             return stateData;
         } catch (error) {
@@ -256,12 +260,13 @@ class StateManager {
     }
 
     /**
-     * Clear localStorage
+     * Clear localStorage for current profile
      */
     clearLocalStorage() {
         try {
-            localStorage.removeItem(AppConfig.storage.localStorageKey);
-            console.log('localStorage cleared');
+            const storageKey = this.getProfileStorageKey();
+            localStorage.removeItem(storageKey);
+            console.log(`localStorage cleared for profile: ${this.state.currentProfile?.id || 'default'}`);
         } catch (error) {
             console.error('Error clearing localStorage:', error);
         }
