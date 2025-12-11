@@ -3580,6 +3580,7 @@ async function switchProfile(profileId, showLoading = true) {
         // Update UI
         updateProfileSelector();
         updateLayerGroupList();
+        updateLayerList(layerManager.getAllLayers());
 
         if (showLoading) {
             loadingManager.hide();
