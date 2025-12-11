@@ -115,6 +115,131 @@ body {
     background: rgba(255, 255, 255, 0.2);
 }
 
+/* ===== Profile Selector ===== */
+.profile-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.75rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.profile-selector label {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.8);
+    font-weight: 500;
+}
+
+.profile-select {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.85rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    cursor: pointer;
+    min-width: 180px;
+    transition: var(--transition);
+}
+
+.profile-select:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.profile-select:focus {
+    outline: none;
+    border-color: var(--secondary-color);
+    box-shadow: 0 0 0 2px rgba(80, 230, 255, 0.3);
+}
+
+.profile-select option {
+    background: var(--bg-dark);
+    color: white;
+}
+
+.btn-icon {
+    padding: 0.35rem 0.5rem;
+    font-size: 1rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
+}
+
+.btn-icon:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
+}
+
+/* ===== Profile List in Modal ===== */
+.profile-list {
+    max-height: 400px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.profile-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.875rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    transition: var(--transition);
+}
+
+.profile-item:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--primary-color);
+}
+
+.profile-item-info {
+    flex: 1;
+}
+
+.profile-item-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.profile-item-meta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.profile-item-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.profile-item.current {
+    background: var(--primary-light);
+    border-color: var(--primary-color);
+}
+
+.profile-item.current .profile-item-name {
+    color: var(--primary-color);
+}
+
+.profile-item.current::after {
+    content: '✓ Active';
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    background: var(--primary-color);
+    color: white;
+    font-size: 0.7rem;
+    border-radius: var(--radius-sm);
+    margin-left: 0.5rem;
+}
+
 /* ===== Main Content ===== */
 .main-content {
     display: flex;
