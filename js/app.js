@@ -31,18 +31,15 @@ function initDataServices() {
 }
 
 /**
- * Save current state using StateManager (auto-save is handled by StateManager)
+ * Save current state using StateManager
+ * NOTE: In Firebase-only mode, this is now a NO-OP.
+ * Layer data is only saved to Firebase. Use "Save to Firebase" button instead.
  */
 function saveToLocalStorage() {
-    try {
-        // StateManager handles auto-save automatically
-        // This function is kept for backward compatibility
-        stateManager.saveToLocalStorage();
-        toastManager.success('State saved successfully');
-    } catch (error) {
-        console.error('Error saving state:', error);
-        toastManager.error('Failed to save state');
-    }
+    // In Firebase-only mode, this just logs and does nothing
+    // Layer data is only saved to Firebase
+    stateManager.saveToLocalStorage();
+    // Don't show success toast since nothing was actually saved
 }
 
 /**
@@ -3531,10 +3528,8 @@ async function switchProfile(profileId, showLoading = true) {
             throw new Error('Profile not found');
         }
 
-        // Save current state before switching
-        if (stateManager.getCurrentProfile() && stateManager.get('isDirty')) {
-            saveToLocalStorage();
-        }
+        // Note: In Firebase-only mode, no need to save to localStorage before switching
+        // All data is managed through Firebase and real-time sync
 
         // Clear current map and layers
         layerManager.clearAllLayers();
