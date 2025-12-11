@@ -3540,6 +3540,10 @@ async function switchProfile(profileId, showLoading = true) {
         layerManager.clearAllLayers();
         mapManager.clearMap();
 
+        // Clear layer groups
+        layerManager.layerGroups.clear();
+        stateManager.set('allLayersGroupId', null, true);
+
         // Set current profile in state and firebase manager
         stateManager.setCurrentProfile(profile);
         firebaseManager.setCurrentProfile(profileId);
@@ -3553,7 +3557,6 @@ async function switchProfile(profileId, showLoading = true) {
         if (result.layers && Object.keys(result.layers).length > 0) {
             // Load groups if available
             if (result.layers._groups) {
-                layerManager.layerGroups.clear();
                 result.layers._groups.forEach(g => {
                     layerManager.layerGroups.set(g.id, g);
                 });
@@ -3575,7 +3578,7 @@ async function switchProfile(profileId, showLoading = true) {
                 }
             });
         } else {
-            // No data for this profile, ensure default group
+            // No data for this profile, create fresh default group
             ensureDefaultLayerGroup();
         }
 
