@@ -133,14 +133,11 @@ async function initializeApp() {
         // Setup map click handler for clearing selection
         setupMapClickHandler();
 
-        // Setup real-time Firebase listener
+        // Initialize profiles and load data (this handles migration, profile selection, and data loading)
+        await initializeProfiles();
+
+        // Setup real-time Firebase listener after profile is set
         enableRealtimeSync();
-
-        // Try to load saved state from localStorage
-        const loaded = loadFromLocalStorage();
-
-        // Ensure default "All Layers" group exists (create if not loaded or missing)
-        ensureDefaultLayerGroup();
 
         // Initialize UI after state is ready
         updateLayerGroupList();
@@ -401,6 +398,12 @@ function setupEventListeners() {
     // Sorting
     document.getElementById('sortAscBtn').addEventListener('click', () => handleSort('asc'));
     document.getElementById('sortDescBtn').addEventListener('click', () => handleSort('desc'));
+
+    // Profiles
+    document.getElementById('profileSelect').addEventListener('change', handleProfileChange);
+    document.getElementById('manageProfilesBtn').addEventListener('click', showProfileManagementModal);
+    document.getElementById('createProfileBtn').addEventListener('click', handleCreateProfile);
+    document.getElementById('closeProfileManagementBtn').addEventListener('click', () => modalManager.close('profileManagementModal'));
 
     // Firebase
     document.getElementById('saveToFirebase').addEventListener('click', handleSaveToFirebase);
@@ -3255,6 +3258,13 @@ function updateColumnSelects() {
  * Handle save to Firebase
  */
 async function handleSaveToFirebase() {
+    const currentProfile = stateManager.getCurrentProfile();
+
+    if (!currentProfile) {
+        toastManager.error('No workspace selected');
+        return;
+    }
+
     loadingManager.show('Saving to Firebase...');
 
     try {
@@ -3264,10 +3274,10 @@ async function handleSaveToFirebase() {
         await firebaseManager.saveAllLayers({
             ...layersData,
             _groups: groupsData
-        });
+        }, currentProfile.name);
 
         loadingManager.hide();
-        toastManager.success('Data saved to Firebase successfully');
+        toastManager.success(`Data saved to Firebase for workspace: ${currentProfile.name}`);
     } catch (error) {
         console.error('Error saving to Firebase:', error);
         loadingManager.hide();
@@ -3279,13 +3289,20 @@ async function handleSaveToFirebase() {
  * Handle load from Firebase
  */
 async function handleLoadFromFirebase() {
+    const currentProfile = stateManager.getCurrentProfile();
+
+    if (!currentProfile) {
+        toastManager.error('No workspace selected');
+        return;
+    }
+
     if (layerManager.getAllLayers().length > 0) {
         if (!confirm('Loading from Firebase will replace current data. Continue?')) {
             return;
         }
     }
 
-    loadingManager.show('Loading from Firebase...');
+    loadingManager.show(`Loading from Firebase for workspace: ${currentProfile.name}...`);
 
     try {
         const result = await firebaseManager.loadAllLayers();
@@ -3413,6 +3430,378 @@ function enableRealtimeSync() {
 
     realtimeListenerEnabled = true;
     console.log('Real-time Firebase sync enabled');
+}
+
+// ==================== PROFILE MANAGEMENT ====================
+
+/**
+ * Initialize profiles on app start
+ */
+async function initializeProfiles() {
+    try {
+        loadingManager.show('Loading workspaces...');
+
+        // First, try to migrate old data if needed
+        const migrationResult = await firebaseManager.migrateToProfiles('Default Workspace');
+
+        if (migrationResult.migrated) {
+            console.log('Migrated old data to default profile');
+            toastManager.success('Your data has been migrated to the new workspace system');
+        }
+
+        // Load all profiles
+        const profiles = await firebaseManager.getAllProfiles();
+        stateManager.updateProfiles(profiles);
+
+        // Check for saved profile preference
+        let currentProfile = stateManager.loadCurrentProfilePreference();
+
+        // If no saved preference or saved profile doesn't exist, use first available or create new
+        if (!currentProfile || !profiles.find(p => p.id === currentProfile.id)) {
+            if (profiles.length > 0) {
+                currentProfile = profiles[0];
+            } else {
+                // No profiles exist, create default one
+                const result = await firebaseManager.createProfile('Default Workspace');
+                currentProfile = {
+                    id: result.profileId,
+                    name: result.profileName,
+                    createdAt: result.createdAt
+                };
+                stateManager.updateProfiles([currentProfile]);
+            }
+        }
+
+        // Set current profile
+        await switchProfile(currentProfile.id, false);
+
+        // Update profile selector UI
+        updateProfileSelector();
+
+        loadingManager.hide();
+    } catch (error) {
+        console.error('Error initializing profiles:', error);
+        loadingManager.hide();
+        toastManager.error('Error loading workspaces: ' + error.message);
+    }
+}
+
+/**
+ * Update profile selector dropdown
+ */
+function updateProfileSelector() {
+    const profileSelect = document.getElementById('profileSelect');
+    const profiles = stateManager.getProfiles();
+    const currentProfile = stateManager.getCurrentProfile();
+
+    profileSelect.innerHTML = '';
+
+    if (profiles.length === 0) {
+        profileSelect.innerHTML = '<option value="">No Workspaces</option>';
+        return;
+    }
+
+    profiles.forEach(profile => {
+        const option = document.createElement('option');
+        option.value = profile.id;
+        option.textContent = profile.name;
+        option.selected = currentProfile && profile.id === currentProfile.id;
+        profileSelect.appendChild(option);
+    });
+}
+
+/**
+ * Switch to a different profile
+ * @param {string} profileId - Profile ID to switch to
+ * @param {boolean} showLoading - Show loading indicator
+ */
+async function switchProfile(profileId, showLoading = true) {
+    try {
+        if (showLoading) {
+            loadingManager.show('Switching workspace...');
+        }
+
+        // Find profile in list
+        const profiles = stateManager.getProfiles();
+        const profile = profiles.find(p => p.id === profileId);
+
+        if (!profile) {
+            throw new Error('Profile not found');
+        }
+
+        // Save current state before switching
+        if (stateManager.getCurrentProfile() && stateManager.get('isDirty')) {
+            saveToLocalStorage();
+        }
+
+        // Clear current map and layers
+        layerManager.clearAllLayers();
+        mapManager.clearMap();
+
+        // Set current profile in state and firebase manager
+        stateManager.setCurrentProfile(profile);
+        firebaseManager.setCurrentProfile(profileId);
+
+        // Save profile preference
+        stateManager.saveCurrentProfilePreference();
+
+        // Load data for this profile from Firebase
+        const result = await firebaseManager.loadAllLayers();
+
+        if (result.layers && Object.keys(result.layers).length > 0) {
+            // Load groups if available
+            if (result.layers._groups) {
+                layerManager.layerGroups.clear();
+                result.layers._groups.forEach(g => {
+                    layerManager.layerGroups.set(g.id, g);
+                });
+                delete result.layers._groups;
+            }
+
+            layerManager.importLayers(result.layers);
+
+            // Ensure "All Layers" group exists
+            ensureDefaultLayerGroup();
+
+            // Re-apply styling
+            layerManager.getAllLayers().forEach(layer => {
+                if (layer.styleType && layer.styleProperty) {
+                    applyPropertyBasedStyle(layer.id, layer.styleProperty, layer.styleType);
+                }
+                if (layer.type === 'polygon' && layer.showLabels) {
+                    mapManager.togglePolygonLabels(layer.id, true, layer.features);
+                }
+            });
+        } else {
+            // No data for this profile, ensure default group
+            ensureDefaultLayerGroup();
+        }
+
+        // Update UI
+        updateProfileSelector();
+        updateLayerGroupList();
+
+        if (showLoading) {
+            loadingManager.hide();
+            toastManager.success(`Switched to workspace: ${profile.name}`);
+        }
+
+        console.log(`Switched to profile: ${profile.name} (${profileId})`);
+    } catch (error) {
+        console.error('Error switching profile:', error);
+        if (showLoading) {
+            loadingManager.hide();
+        }
+        toastManager.error('Error switching workspace: ' + error.message);
+    }
+}
+
+/**
+ * Handle profile selection change
+ */
+async function handleProfileChange() {
+    const profileSelect = document.getElementById('profileSelect');
+    const selectedProfileId = profileSelect.value;
+    const currentProfile = stateManager.getCurrentProfile();
+
+    if (!selectedProfileId || selectedProfileId === currentProfile?.id) {
+        return;
+    }
+
+    // Confirm if there are unsaved changes
+    if (stateManager.get('isDirty')) {
+        if (!confirm('You have unsaved changes. Do you want to switch workspaces anyway?')) {
+            // Reset select to current profile
+            profileSelect.value = currentProfile.id;
+            return;
+        }
+    }
+
+    await switchProfile(selectedProfileId);
+}
+
+/**
+ * Show profile management modal
+ */
+async function showProfileManagementModal() {
+    try {
+        // Refresh profiles list from Firebase
+        const profiles = await firebaseManager.getAllProfiles();
+        stateManager.updateProfiles(profiles);
+
+        // Update profile list in modal
+        updateProfileList();
+
+        modalManager.show('profileManagementModal');
+    } catch (error) {
+        console.error('Error loading profiles:', error);
+        toastManager.error('Error loading workspaces: ' + error.message);
+    }
+}
+
+/**
+ * Update profile list in modal
+ */
+function updateProfileList() {
+    const profileList = document.getElementById('profileList');
+    const profiles = stateManager.getProfiles();
+    const currentProfile = stateManager.getCurrentProfile();
+
+    if (profiles.length === 0) {
+        profileList.innerHTML = '<p class="empty-state">No workspaces yet. Create one above!</p>';
+        return;
+    }
+
+    profileList.innerHTML = '';
+
+    profiles.forEach(profile => {
+        const div = document.createElement('div');
+        div.className = `profile-item ${profile.id === currentProfile?.id ? 'current' : ''}`;
+
+        div.innerHTML = `
+            <div class="profile-item-info">
+                <div class="profile-item-name">${profile.name}</div>
+                <div class="profile-item-meta">
+                    ${profile.layerCount} layer${profile.layerCount !== 1 ? 's' : ''} •
+                    Created: ${new Date(profile.createdAt).toLocaleDateString()}
+                </div>
+            </div>
+            <div class="profile-item-actions">
+                <button class="btn btn-small btn-secondary" onclick="handleRenameProfile('${profile.id}')">Rename</button>
+                ${profile.id !== currentProfile?.id ? `<button class="btn btn-small btn-danger" onclick="handleDeleteProfile('${profile.id}')">Delete</button>` : ''}
+            </div>
+        `;
+
+        profileList.appendChild(div);
+    });
+}
+
+/**
+ * Handle create new profile
+ */
+async function handleCreateProfile() {
+    const input = document.getElementById('newProfileName');
+    const profileName = input.value.trim();
+
+    if (!profileName) {
+        toastManager.error('Please enter a workspace name');
+        return;
+    }
+
+    try {
+        loadingManager.show('Creating workspace...');
+
+        const result = await firebaseManager.createProfile(profileName);
+
+        // Refresh profiles list
+        const profiles = await firebaseManager.getAllProfiles();
+        stateManager.updateProfiles(profiles);
+
+        // Update UI
+        updateProfileList();
+        updateProfileSelector();
+
+        input.value = '';
+
+        loadingManager.hide();
+        toastManager.success(`Workspace "${profileName}" created successfully`);
+    } catch (error) {
+        console.error('Error creating profile:', error);
+        loadingManager.hide();
+        toastManager.error('Error creating workspace: ' + error.message);
+    }
+}
+
+/**
+ * Handle rename profile
+ * @param {string} profileId - Profile ID to rename
+ */
+async function handleRenameProfile(profileId) {
+    const profiles = stateManager.getProfiles();
+    const profile = profiles.find(p => p.id === profileId);
+
+    if (!profile) {
+        return;
+    }
+
+    const newName = prompt('Enter new workspace name:', profile.name);
+
+    if (!newName || newName.trim() === '' || newName === profile.name) {
+        return;
+    }
+
+    try {
+        loadingManager.show('Renaming workspace...');
+
+        await firebaseManager.renameProfile(profileId, newName.trim());
+
+        // Refresh profiles
+        const updatedProfiles = await firebaseManager.getAllProfiles();
+        stateManager.updateProfiles(updatedProfiles);
+
+        // Update current profile if this is the active one
+        const currentProfile = stateManager.getCurrentProfile();
+        if (currentProfile && currentProfile.id === profileId) {
+            stateManager.setCurrentProfile({ ...currentProfile, name: newName.trim() });
+            stateManager.saveCurrentProfilePreference();
+        }
+
+        // Update UI
+        updateProfileList();
+        updateProfileSelector();
+
+        loadingManager.hide();
+        toastManager.success('Workspace renamed successfully');
+    } catch (error) {
+        console.error('Error renaming profile:', error);
+        loadingManager.hide();
+        toastManager.error('Error renaming workspace: ' + error.message);
+    }
+}
+
+/**
+ * Handle delete profile
+ * @param {string} profileId - Profile ID to delete
+ */
+async function handleDeleteProfile(profileId) {
+    const profiles = stateManager.getProfiles();
+    const profile = profiles.find(p => p.id === profileId);
+    const currentProfile = stateManager.getCurrentProfile();
+
+    if (!profile) {
+        return;
+    }
+
+    // Can't delete current profile
+    if (currentProfile && profileId === currentProfile.id) {
+        toastManager.error('Cannot delete the active workspace. Switch to another workspace first.');
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to delete the workspace "${profile.name}"? This action cannot be undone.`)) {
+        return;
+    }
+
+    try {
+        loadingManager.show('Deleting workspace...');
+
+        await firebaseManager.deleteProfile(profileId);
+
+        // Refresh profiles
+        const updatedProfiles = await firebaseManager.getAllProfiles();
+        stateManager.updateProfiles(updatedProfiles);
+
+        // Update UI
+        updateProfileList();
+        updateProfileSelector();
+
+        loadingManager.hide();
+        toastManager.success('Workspace deleted successfully');
+    } catch (error) {
+        console.error('Error deleting profile:', error);
+        loadingManager.hide();
+        toastManager.error('Error deleting workspace: ' + error.message);
+    }
 }
 
 /**

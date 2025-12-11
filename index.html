@@ -14,6 +14,13 @@
         <header class="app-header">
             <h1>Sales Territory Mapper</h1>
             <div class="header-actions">
+                <div class="profile-selector">
+                    <label for="profileSelect">Workspace:</label>
+                    <select id="profileSelect" class="profile-select">
+                        <option value="">Loading...</option>
+                    </select>
+                    <button id="manageProfilesBtn" class="btn btn-icon" title="Manage Workspaces">⚙️</button>
+                </div>
                 <button id="saveToFirebase" class="btn btn-primary">Save to Firebase</button>
                 <button id="loadFromFirebase" class="btn btn-secondary">Load from Firebase</button>
             </div>
@@ -119,6 +126,38 @@
                             <button type="button" class="btn btn-danger" id="deleteFeature">Delete Feature</button>
                         </div>
                     </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Profile Management Modal -->
+        <div id="profileManagementModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Manage Workspaces</h2>
+                    <span class="close" data-modal="profileManagementModal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Create New Workspace:</label>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <input type="text" id="newProfileName" class="form-input" placeholder="Enter workspace name" style="flex: 1;">
+                            <button id="createProfileBtn" class="btn btn-primary">Create</button>
+                        </div>
+                    </div>
+
+                    <hr style="margin: 1.5rem 0;">
+
+                    <div class="form-group">
+                        <label>Your Workspaces:</label>
+                        <div id="profileList" class="profile-list">
+                            <!-- Profiles will be listed here -->
+                        </div>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button id="closeProfileManagementBtn" class="btn btn-secondary">Close</button>
+                    </div>
                 </div>
             </div>
         </div>

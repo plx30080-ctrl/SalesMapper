@@ -13,6 +13,10 @@ class StateManager {
             csvParser: null,
             geocodingService: null,
 
+            // Profile state
+            currentProfile: null, // { id, name, createdAt, lastUpdated }
+            profiles: [], // Array of all available profiles
+
             // Application state
             layers: new Map(),
             layerGroups: new Map(),
@@ -476,6 +480,81 @@ class StateManager {
 
         this.clearSubscribers();
         console.log('StateManager destroyed');
+    }
+
+    // ==================== PROFILE MANAGEMENT ====================
+
+    /**
+     * Set current profile
+     * @param {Object} profile - Profile object { id, name, createdAt, lastUpdated }
+     */
+    setCurrentProfile(profile) {
+        this.state.currentProfile = profile;
+        this.notify('currentProfile', profile);
+        console.log(`Current profile set to: ${profile.name}`);
+    }
+
+    /**
+     * Get current profile
+     * @returns {Object|null} Current profile or null
+     */
+    getCurrentProfile() {
+        return this.state.currentProfile;
+    }
+
+    /**
+     * Update profiles list
+     * @param {Array} profiles - Array of profile objects
+     */
+    updateProfiles(profiles) {
+        this.state.profiles = profiles;
+        this.notify('profiles', profiles);
+    }
+
+    /**
+     * Get profiles list
+     * @returns {Array} Array of profiles
+     */
+    getProfiles() {
+        return this.state.profiles;
+    }
+
+    /**
+     * Get profile-aware localStorage key
+     * @returns {string} Storage key
+     */
+    getProfileStorageKey() {
+        const profileId = this.state.currentProfile?.id || 'default';
+        return `${AppConfig.storage.localStorageKey}_${profileId}`;
+    }
+
+    /**
+     * Save current profile preference to localStorage
+     */
+    saveCurrentProfilePreference() {
+        try {
+            if (this.state.currentProfile) {
+                localStorage.setItem('salesMapper_currentProfile', JSON.stringify(this.state.currentProfile));
+            }
+        } catch (error) {
+            console.error('Error saving profile preference:', error);
+        }
+    }
+
+    /**
+     * Load current profile preference from localStorage
+     * @returns {Object|null} Saved profile preference or null
+     */
+    loadCurrentProfilePreference() {
+        try {
+            const saved = localStorage.getItem('salesMapper_currentProfile');
+            if (saved) {
+                return JSON.parse(saved);
+            }
+        } catch (error) {
+            console.error('Error loading profile preference:', error);
+        }
+        return null;
     }
 }
 
