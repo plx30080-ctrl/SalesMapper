@@ -199,99 +199,61 @@ class StateManager {
 
     /**
      * Save state to localStorage
+     * NOTE: This is now a NO-OP for layer data. Layer data is only saved to Firebase.
+     * Only profile preferences are saved to localStorage.
      * @returns {boolean} Success
      */
     saveToLocalStorage() {
-        try {
-            const layerManager = this.get('layerManager');
-            if (!layerManager) {
-                console.warn('LayerManager not available for save');
-                return false;
-            }
+        console.log('saveToLocalStorage called - SKIPPED (Firebase-only mode for layer data)');
+        console.log('Use "Save to Firebase" button to save layer data.');
 
-            const layersData = layerManager.exportAllLayers();
-            const groupsData = Array.from(this.state.layerGroups.values());
+        // Mark as not dirty since we're not saving
+        this.state.isDirty = false;
 
-            const stateData = {
-                layers: layersData,
-                groups: groupsData,
-                allLayersGroupId: this.state.allLayersGroupId,
-                activeGroup: this.state.activeGroup,
-                timestamp: Utils.formatDate()
-            };
-
-            // Use profile-aware storage key
-            const storageKey = this.getProfileStorageKey();
-            localStorage.setItem(storageKey, JSON.stringify(stateData));
-
-            this.state.isDirty = false;
-            this.state.lastSaved = Utils.formatDate();
-
-            console.log(`State saved to localStorage for profile: ${this.state.currentProfile?.id || 'default'}`);
-            return true;
-        } catch (error) {
-            console.error('Error saving state to localStorage:', error);
-            return false;
-        }
+        return true;
     }
 
     /**
      * Load state from localStorage
-     * @returns {Object|null} Loaded state or null
+     * NOTE: This is now a NO-OP for layer data. Layer data is only loaded from Firebase.
+     * @returns {Object|null} Always returns null (no layer data in localStorage)
      */
     loadFromLocalStorage() {
-        try {
-            // Use profile-aware storage key
-            const storageKey = this.getProfileStorageKey();
-            const saved = localStorage.getItem(storageKey);
-            if (!saved) {
-                console.log(`No saved state found in localStorage for profile: ${this.state.currentProfile?.id || 'default'}`);
-                return null;
-            }
+        console.log('loadFromLocalStorage called - SKIPPED (Firebase-only mode for layer data)');
+        console.log('Layer data will be loaded from Firebase only.');
 
-            const stateData = JSON.parse(saved);
-            console.log(`State loaded from localStorage for profile: ${this.state.currentProfile?.id || 'default'}:`, stateData);
-
-            return stateData;
-        } catch (error) {
-            console.error('Error loading from localStorage:', error);
-            return null;
-        }
+        // Return null to indicate no local data
+        return null;
     }
 
     /**
-     * Clear localStorage for current profile
+     * Clear localStorage
+     * NOTE: In Firebase-only mode, this only clears profile preferences.
+     * Layer data is never stored in localStorage.
      */
     clearLocalStorage() {
-        try {
-            const storageKey = this.getProfileStorageKey();
-            localStorage.removeItem(storageKey);
-            console.log(`localStorage cleared for profile: ${this.state.currentProfile?.id || 'default'}`);
-        } catch (error) {
-            console.error('Error clearing localStorage:', error);
-        }
+        console.log('clearLocalStorage called - No layer data to clear (Firebase-only mode)');
+        // Could clear profile preference if needed, but we keep it
+        return true;
     }
 
     /**
      * Setup auto-save
+     * NOTE: Auto-save to localStorage is DISABLED for multi-user collaboration.
+     * Layer data is only saved to Firebase to prevent conflicts.
+     * Profile preferences are still saved to localStorage.
      */
     setupAutoSave() {
-        if (!AppConfig.storage.autoSaveEnabled) {
-            return;
-        }
+        // DISABLED: Auto-save to localStorage removed to prevent multi-user conflicts
+        // All layer data is managed through Firebase only
+        // Real-time sync keeps users in sync
 
-        // Auto-save every 30 seconds if dirty
-        this.autoSaveTimer = setInterval(() => {
-            if (this.state.isDirty) {
-                this.saveToLocalStorage();
-            }
-        }, 30000);
+        console.log('Auto-save to localStorage is disabled. Using Firebase-only for layer data.');
 
-        // Save on window unload
+        // Still save profile preference on window unload
         window.addEventListener('beforeunload', () => {
-            if (this.state.isDirty) {
-                this.saveToLocalStorage();
-            }
+            // Only save current profile preference, not layer data
+            this.saveCurrentProfilePreference();
         });
     }
 
