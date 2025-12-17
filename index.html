@@ -34,56 +34,85 @@
         <div class="main-content">
             <!-- Sidebar -->
             <aside class="sidebar">
-                <!-- Quick Actions -->
-                <section class="panel compact">
-                    <div class="quick-actions">
-                        <button id="showUploadBtn" class="btn btn-small" title="Import CSV/Excel files">
-                            <span>📤</span>Upload
-                        </button>
-                        <button id="showSearchBtn" class="btn btn-small" title="Search for an address">
-                            <span>🔍</span>Search
-                        </button>
-                        <button id="showDrawToolsBtn" class="btn btn-small" title="Draw points or polygons">
-                            <span>✏️</span>Draw
-                        </button>
-                        <button id="showFilterBtn" class="btn btn-small" title="Filter and sort layers">
-                            <span>⚙️</span>Filter
-                        </button>
-                        <button id="showPluginsBtn" class="btn btn-small" title="Manage plugins">
-                            <span>🔌</span>Plugins
-                        </button>
-                    </div>
-                </section>
+                <!-- Sidebar Tabs (v3.0) -->
+                <div class="sidebar-tabs">
+                    <button class="sidebar-tab active" data-tab="layers">
+                        <span>📁</span> Layers
+                    </button>
+                    <button class="sidebar-tab" data-tab="analytics">
+                        <span>📊</span> Analytics
+                    </button>
+                </div>
 
-                <!-- Layer Groups -->
-                <section class="panel">
-                    <div class="panel-header">
-                        <h2>Layer Groups</h2>
-                        <button id="addGroupBtn" class="icon-btn" title="Add group">+</button>
-                    </div>
-                    <div id="layerGroupList" class="layer-group-list">
-                        <!-- Layer groups will be dynamically added here -->
-                    </div>
-                </section>
+                <!-- Layers Tab Content -->
+                <div id="layersTab" class="tab-content active">
+                    <!-- Quick Actions -->
+                    <section class="panel compact">
+                        <div class="quick-actions">
+                            <button id="showUploadBtn" class="btn btn-small" title="Import CSV/Excel files">
+                                <span>📤</span>Upload
+                            </button>
+                            <button id="showSearchBtn" class="btn btn-small" title="Search for an address">
+                                <span>🔍</span>Search
+                            </button>
+                            <button id="showDrawToolsBtn" class="btn btn-small" title="Draw points or polygons">
+                                <span>✏️</span>Draw
+                            </button>
+                            <button id="showFilterBtn" class="btn btn-small" title="Filter and sort layers">
+                                <span>⚙️</span>Filter
+                            </button>
+                            <button id="showPluginsBtn" class="btn btn-small" title="Manage plugins">
+                                <span>🔌</span>Plugins
+                            </button>
+                        </div>
+                    </section>
 
-                <!-- Layers Section -->
-                <section class="panel">
-                    <div class="panel-header">
-                        <h2>Layers</h2>
-                        <button id="addLayerBtn" class="icon-btn" title="Add layer">+</button>
-                    </div>
-                    <div id="layerList" class="layer-list">
-                        <!-- Layers will be dynamically added here -->
-                    </div>
-                </section>
+                    <!-- Layer Groups -->
+                    <section class="panel">
+                        <div class="panel-header">
+                            <h2>Layer Groups</h2>
+                            <button id="addGroupBtn" class="icon-btn" title="Add group">+</button>
+                        </div>
+                        <div id="layerGroupList" class="layer-group-list">
+                            <!-- Layer groups will be dynamically added here -->
+                        </div>
+                    </section>
 
-                <!-- Feature Info Section -->
-                <section class="panel">
-                    <h2>Selected Feature</h2>
-                    <div id="featureInfo" class="feature-info">
-                        <p class="empty-state">Click on a feature to see details</p>
-                    </div>
-                </section>
+                    <!-- Layers Section -->
+                    <section class="panel">
+                        <div class="panel-header">
+                            <h2>Layers</h2>
+                            <button id="addLayerBtn" class="icon-btn" title="Add layer">+</button>
+                        </div>
+                        <div id="layerList" class="layer-list">
+                            <!-- Layers will be dynamically added here -->
+                        </div>
+                    </section>
+
+                    <!-- Feature Info Section -->
+                    <section class="panel">
+                        <h2>Selected Feature</h2>
+                        <div id="featureInfo" class="feature-info">
+                            <p class="empty-state">Click on a feature to see details</p>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Analytics Tab Content (v3.0) -->
+                <div id="analyticsTab" class="tab-content">
+                    <section class="panel">
+                        <div class="panel-header">
+                            <h2>Territory Analytics</h2>
+                            <button id="refreshAnalyticsBtn" class="icon-btn" title="Refresh">↻</button>
+                            <button id="exportAnalyticsBtn" class="icon-btn" title="Export Metrics">📥</button>
+                        </div>
+                        <div id="analyticsContent" class="analytics-content">
+                            <div class="analytics-loading">
+                                <p>Loading analytics...</p>
+                            </div>
+                        </div>
+                    </section>
+                </div>
             </aside>
 
             <!-- Map Container -->
@@ -585,6 +614,7 @@
 
     <!-- v3.0 Features -->
     <script src="js/command-history.js"></script>
+    <script src="js/analytics-panel.js"></script>
 
     <!-- Main application controller -->
     <script src="js/app.js"></script>

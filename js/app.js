@@ -9,6 +9,7 @@ let layerManager;
 let csvParser;
 let geocodingService;
 let commandHistory; // v3.0: Undo/Redo functionality
+let analyticsPanel; // v3.0: Analytics dashboard
 
 // Global state for UI interactions
 let currentLayerForActions = null;  // Currently selected layer for context menu actions
@@ -117,6 +118,11 @@ async function initializeApp() {
         // v3.0: Initialize command history for undo/redo
         commandHistory = new CommandHistory(50); // 50-step history
         console.log('Command history initialized (v3.0)');
+
+        // v3.0: Initialize analytics panel
+        analyticsPanel = new AnalyticsPanel(layerManager, stateManager);
+        analyticsPanel.initialize();
+        console.log('Analytics Panel initialized (v3.0)');
 
         // Setup map callbacks for feature selection and drawing
         setupMapCallbacks();
@@ -519,6 +525,29 @@ function setupEventListeners() {
     document.getElementById('uploadDataBtn').addEventListener('click', () => {
         modalManager.close('addLayerModal');
         modalManager.show('uploadModal');
+    });
+
+    // v3.0: Sidebar Tab Switching
+    document.querySelectorAll('.sidebar-tab').forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            const tabName = e.currentTarget.dataset.tab;
+            switchTab(tabName);
+        });
+    });
+
+    // v3.0: Analytics Actions
+    document.getElementById('refreshAnalyticsBtn').addEventListener('click', () => {
+        if (analyticsPanel) {
+            analyticsPanel.render();
+            toastManager.success('Analytics refreshed');
+        }
+    });
+
+    document.getElementById('exportAnalyticsBtn').addEventListener('click', () => {
+        if (analyticsPanel) {
+            analyticsPanel.exportMetrics();
+            toastManager.success('Analytics exported');
+        }
     });
 
     // Modal close buttons
@@ -1004,6 +1033,34 @@ function updateHistoryButtons() {
         redoBtn.title = commandHistory.canRedo()
             ? `Redo: ${commandHistory.getRedoDescription()} (Ctrl+Y)`
             : 'Redo (Ctrl+Y)';
+    }
+}
+
+/**
+ * v3.0: Switch between sidebar tabs
+ */
+function switchTab(tabName) {
+    // Update tab buttons
+    document.querySelectorAll('.sidebar-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.tab === tabName);
+    });
+
+    // Update tab content
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+
+    const targetTab = document.getElementById(`${tabName}Tab`);
+    if (targetTab) {
+        targetTab.classList.add('active');
+    }
+
+    // Update state
+    stateManager.set('activeTab', tabName);
+
+    // Render analytics if switching to analytics tab
+    if (tabName === 'analytics' && analyticsPanel) {
+        analyticsPanel.render();
     }
 }
 
