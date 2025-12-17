@@ -482,6 +482,16 @@ function setupEventListeners() {
     document.getElementById('confirmMoveBtn').addEventListener('click', handleMoveFeature);
     document.getElementById('cancelMoveBtn').addEventListener('click', () => modalManager.close('moveFeatureModal'));
 
+    // Add Layer Modal
+    document.getElementById('createBlankLayerBtn').addEventListener('click', () => {
+        modalManager.close('addLayerModal');
+        handleCreateBlankLayer();
+    });
+    document.getElementById('uploadDataBtn').addEventListener('click', () => {
+        modalManager.close('addLayerModal');
+        modalManager.show('uploadModal');
+    });
+
     // Modal close buttons
     document.querySelectorAll('.close').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -507,15 +517,7 @@ function setupEventListeners() {
  * Handle add layer button click - offers choice to create blank or upload
  */
 function handleAddLayerClick() {
-    const choice = confirm('Create a blank layer?\n\nClick OK to create a blank layer, or Cancel to upload data from a file.');
-
-    if (choice) {
-        // Create blank layer
-        handleCreateBlankLayer();
-    } else {
-        // Upload data
-        modalManager.show('uploadModal');
-    }
+    modalManager.show('addLayerModal');
 }
 
 /**
@@ -649,6 +651,10 @@ function updateLayerGroupList() {
                 <div class="layer-opacity-control">
                     <input type="range" class="group-opacity-slider" min="0" max="100" value="${groupOpacityPercent}" title="Group Opacity: ${groupOpacityPercent}%">
                 </div>
+                ${!isAllLayers ? `
+                    <button class="group-action-btn group-rename-btn" title="Rename Group">✏️</button>
+                    <button class="group-action-btn group-delete-btn" title="Delete Group">🗑️</button>
+                ` : ''}
             </div>
             <div class="layer-group-layers" style="display: ${isExpanded ? 'block' : 'none'};">
                 <!-- Nested layers will be added here -->
@@ -687,11 +693,32 @@ function updateLayerGroupList() {
             setGroupOpacity(group.id, newOpacity);
         });
 
+        // Rename group button
+        if (!isAllLayers) {
+            const renameBtn = groupItem.querySelector('.group-rename-btn');
+            if (renameBtn) {
+                renameBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    handleRenameGroup(group.id, group.name);
+                });
+            }
+
+            // Delete group button
+            const deleteBtn = groupItem.querySelector('.group-delete-btn');
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    handleDeleteGroup(group.id, group.name);
+                });
+            }
+        }
+
         // Select group (click on name area)
         groupHeader.addEventListener('click', (e) => {
             if (!e.target.classList.contains('layer-group-toggle') &&
                 !e.target.classList.contains('group-opacity-slider') &&
-                !e.target.classList.contains('group-expand-btn')) {
+                !e.target.classList.contains('group-expand-btn') &&
+                !e.target.classList.contains('group-action-btn')) {
                 selectGroup(group.id);
             }
         });
@@ -852,6 +879,49 @@ function selectGroup(groupId) {
     }
     updateLayerGroupList();
     updateLayerList(layerManager.getAllLayers());
+}
+
+/**
+ * Handle renaming a layer group
+ */
+function handleRenameGroup(groupId, currentName) {
+    const newName = prompt('Enter new group name:', currentName);
+    if (!newName || newName.trim() === '' || newName === currentName) {
+        return;
+    }
+
+    layerManager.renameLayerGroup(groupId, newName.trim());
+    toastManager.success(`Renamed group to "${newName}"`);
+    updateLayerGroupList();
+    saveToFirebase();
+}
+
+/**
+ * Handle deleting a layer group
+ */
+function handleDeleteGroup(groupId, groupName) {
+    const group = layerManager.getLayerGroup(groupId);
+    if (!group) return;
+
+    const layerCount = (group.layerIds || []).length;
+    const message = layerCount > 0
+        ? `Delete group "${groupName}"?\n\nThis will ungroup ${layerCount} layer(s). The layers will not be deleted.`
+        : `Delete group "${groupName}"?`;
+
+    if (!confirm(message)) {
+        return;
+    }
+
+    // If this was the active group, clear selection
+    if (stateManager.get('activeGroup') === groupId) {
+        stateManager.set('activeGroup', null);
+    }
+
+    layerManager.deleteLayerGroup(groupId);
+    toastManager.success(`Deleted group "${groupName}"`);
+    updateLayerGroupList();
+    updateLayerList(layerManager.getAllLayers());
+    saveToFirebase();
 }
 
 /**
@@ -3554,13 +3624,17 @@ async function switchProfile(profileId, showLoading = true) {
             if (result.layers._groups) {
                 result.layers._groups.forEach(g => {
                     layerManager.layerGroups.set(g.id, g);
+                    // If this is the default "All Layers" group, set it in state
+                    if (g.metadata && g.metadata.isDefault) {
+                        stateManager.set('allLayersGroupId', g.id, true);
+                    }
                 });
                 delete result.layers._groups;
             }
 
             layerManager.importLayers(result.layers);
 
-            // Ensure "All Layers" group exists
+            // Ensure "All Layers" group exists (will use existing if found above)
             ensureDefaultLayerGroup();
 
             // Re-apply styling
