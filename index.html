@@ -25,6 +25,12 @@
                     <button id="undoBtn" class="btn btn-icon" title="Undo (Ctrl+Z)" disabled>↶</button>
                     <button id="redoBtn" class="btn btn-icon" title="Redo (Ctrl+Y)" disabled>↷</button>
                 </div>
+                <div class="notification-controls">
+                    <button id="notificationBtn" class="btn btn-icon" title="Notifications">
+                        🔔
+                        <span id="notificationBadge" class="notification-badge" style="display: none;">0</span>
+                    </button>
+                </div>
                 <button id="saveToFirebase" class="btn btn-primary">Save to Firebase</button>
                 <button id="loadFromFirebase" class="btn btn-secondary">Load from Firebase</button>
             </div>
@@ -69,6 +75,9 @@
                             </button>
                             <button id="showPluginsBtn" class="btn btn-small" title="Manage plugins">
                                 <span>🔌</span>Plugins
+                            </button>
+                            <button id="showClusterSettingsBtn" class="btn btn-small" title="Clustering settings (v3.0)">
+                                <span>🗺️</span>Clustering
                             </button>
                         </div>
                     </section>
@@ -172,6 +181,17 @@
                     <div id="legendContent"></div>
                 </div>
             </main>
+        </div>
+
+        <!-- Notification Panel -->
+        <div id="notificationPanel" class="notification-panel">
+            <div class="notification-panel-header">
+                <h3>🔔 Notifications</h3>
+                <button id="closeNotificationPanel" class="close-panel-btn">×</button>
+            </div>
+            <div id="notificationCenterContent" class="notification-panel-body">
+                <p>Loading notifications...</p>
+            </div>
         </div>
 
         <!-- Edit Modal -->
@@ -497,6 +517,22 @@
             </div>
         </div>
 
+        <!-- Cluster Settings Modal (v3.0) -->
+        <div id="clusterSettingsModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>🗺️ Clustering Settings</h2>
+                    <span class="close" data-modal="clusterSettingsModal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted">Configure marker clustering behavior and appearance.</p>
+                    <div id="clusterSettingsContent">
+                        <p>Loading settings...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Style Options Modal -->
         <div id="styleModal" class="modal">
             <div class="modal-content">
@@ -650,6 +686,8 @@
     <script src="js/analytics-panel.js"></script>
     <script src="js/distance-tool.js"></script>
     <script src="js/activity-log.js"></script>
+    <script src="js/notification-center.js"></script>
+    <script src="js/cluster-manager.js"></script>
 
     <!-- Main application controller -->
     <script src="js/app.js"></script>
