@@ -21,6 +21,7 @@ class MapManager {
         this.colorIndex = 0;
         this.infoWindow = null;
         this.searchMarker = null;
+        this.clusterManager = null; // v3.0: Enhanced clustering
     }
 
     /**
@@ -57,6 +58,14 @@ class MapManager {
 
                 // Setup drawing tools
                 this.setupDrawingTools();
+
+                // v3.0: Initialize enhanced cluster manager
+                if (typeof ClusterManager !== 'undefined') {
+                    this.clusterManager = new ClusterManager(this.map);
+                    console.log('Enhanced ClusterManager initialized (v3.0)');
+                } else {
+                    console.warn('ClusterManager not loaded, falling back to default clustering');
+                }
 
                 console.log('Google Map initialized successfully');
                 eventBus.emit('map.initialized', { center: this.map.getCenter(), zoom: this.map.getZoom() });
@@ -548,21 +557,28 @@ class MapManager {
         }
         this.markers.get(layerId).push(...markers);
 
-        // Setup clustering if enabled and MarkerClusterer is available
+        // v3.0: Setup clustering with enhanced ClusterManager
         let clusterer = null;
         if (dataSource.enableClustering && markers.length > 0) {
-            // Check if MarkerClusterer is available in global scope
-            if (typeof markerClusterer !== 'undefined' && markerClusterer.MarkerClusterer) {
+            if (this.clusterManager) {
+                // Use enhanced cluster manager
+                clusterer = this.clusterManager.initializeForLayer(layerId, markers, color);
+                console.log(`Enhanced clustering initialized for ${layerId} with ${markers.length} markers`);
+            } else if (typeof markerClusterer !== 'undefined' && markerClusterer.MarkerClusterer) {
+                // Fallback to default MarkerClusterer
                 clusterer = new markerClusterer.MarkerClusterer({
                     map: this.map,
                     markers: markers
                 });
-                console.log(`MarkerClusterer initialized for ${layerId} with ${markers.length} markers`);
+                console.log(`Default MarkerClusterer initialized for ${layerId} with ${markers.length} markers`);
             } else {
-                console.warn(`Clustering requested for ${layerId} but MarkerClusterer library not loaded yet`);
+                console.warn(`Clustering requested for ${layerId} but no clustering library available`);
                 // Fallback: add markers to map manually
                 markers.forEach(m => m.setMap(this.map));
             }
+        } else if (markers.length > 0) {
+            // No clustering - add markers directly to map
+            markers.forEach(m => m.setMap(this.map));
         }
 
         // Store layer reference
