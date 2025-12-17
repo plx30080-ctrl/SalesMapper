@@ -12,6 +12,7 @@ let commandHistory; // v3.0: Undo/Redo functionality
 let analyticsPanel; // v3.0: Analytics dashboard
 let distanceTool; // v3.0: Distance measurement
 let activityLog; // v3.0 Phase 3: Activity tracking
+let notificationCenter; // v3.0 Phase 3: Notification system
 
 // Global state for UI interactions
 let currentLayerForActions = null;  // Currently selected layer for context menu actions
@@ -134,6 +135,11 @@ async function initializeApp() {
         activityLog = new ActivityLog(stateManager);
         activityLog.initialize();
         console.log('Activity Log initialized (v3.0 Phase 3)');
+
+        // v3.0 Phase 3: Initialize notification center
+        notificationCenter = new NotificationCenter();
+        notificationCenter.initialize();
+        console.log('Notification Center initialized (v3.0 Phase 3)');
 
         // Setup map callbacks for feature selection and drawing
         setupMapCallbacks();
@@ -482,6 +488,16 @@ function setupEventListeners() {
     // Plugins
     document.getElementById('showPluginsBtn').addEventListener('click', showPluginsModal);
     document.getElementById('closePluginsBtn').addEventListener('click', () => modalManager.close('pluginsModal'));
+
+    // v3.0: Cluster Settings
+    document.getElementById('showClusterSettingsBtn').addEventListener('click', () => {
+        if (mapManager && mapManager.clusterManager) {
+            mapManager.clusterManager.renderSettingsPanel();
+            modalManager.show('clusterSettingsModal');
+        } else {
+            toastManager.error('Cluster manager not available');
+        }
+    });
 
     // Map Controls
     document.getElementById('zoomIn').addEventListener('click', () => mapManager.zoomIn());
