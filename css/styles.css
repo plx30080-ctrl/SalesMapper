@@ -159,6 +159,40 @@ body {
     color: white;
 }
 
+/* ===== History Controls (Undo/Redo) ===== */
+.history-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.history-controls .btn-icon {
+    padding: 0.5rem;
+    font-size: 1.2rem;
+    line-height: 1;
+    min-width: auto;
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.8);
+    transition: var(--transition);
+}
+
+.history-controls .btn-icon:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.history-controls .btn-icon:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
 .btn-icon {
     padding: 0.35rem 0.5rem;
     font-size: 1rem;
@@ -727,6 +761,18 @@ body {
     border-radius: 10px;
     flex-shrink: 0;
     font-weight: 500;
+}
+
+/* v3.0: Territory area display */
+.layer-area {
+    font-size: 0.7rem;
+    color: var(--secondary-color);
+    background-color: rgba(80, 230, 255, 0.1);
+    padding: 0.125rem 0.4rem;
+    border-radius: 10px;
+    flex-shrink: 0;
+    font-weight: 500;
+    margin-left: 0.25rem;
 }
 
 .layer-reorder-btns {

@@ -21,6 +21,10 @@
                     </select>
                     <button id="manageProfilesBtn" class="btn btn-icon" title="Manage Workspaces">⚙️</button>
                 </div>
+                <div class="history-controls">
+                    <button id="undoBtn" class="btn btn-icon" title="Undo (Ctrl+Z)" disabled>↶</button>
+                    <button id="redoBtn" class="btn btn-icon" title="Redo (Ctrl+Y)" disabled>↷</button>
+                </div>
                 <button id="saveToFirebase" class="btn btn-primary">Save to Firebase</button>
                 <button id="loadFromFirebase" class="btn btn-secondary">Load from Firebase</button>
             </div>
@@ -578,6 +582,9 @@
     <script src="js/csv-parser.js"></script>
     <script src="js/map-manager.js"></script>
     <script src="js/layer-manager.js"></script>
+
+    <!-- v3.0 Features -->
+    <script src="js/command-history.js"></script>
 
     <!-- Main application controller -->
     <script src="js/app.js"></script>

@@ -8,6 +8,7 @@ let mapManager;
 let layerManager;
 let csvParser;
 let geocodingService;
+let commandHistory; // v3.0: Undo/Redo functionality
 
 // Global state for UI interactions
 let currentLayerForActions = null;  // Currently selected layer for context menu actions
@@ -113,12 +114,17 @@ async function initializeApp() {
         csvParser = new CSVParser();
         geocodingService = new GeocodingService();
 
+        // v3.0: Initialize command history for undo/redo
+        commandHistory = new CommandHistory(50); // 50-step history
+        console.log('Command history initialized (v3.0)');
+
         // Setup map callbacks for feature selection and drawing
         setupMapCallbacks();
 
         // Store managers in StateManager for access
         stateManager.set('mapManager', mapManager, true);
         stateManager.set('layerManager', layerManager, true);
+        stateManager.set('commandHistory', commandHistory, true);
 
         // Initialize plugin system
         initializePluginSystem();
@@ -179,6 +185,11 @@ function initializePluginSystem() {
  * Setup EventBus subscriptions (replaces old callback pattern)
  */
 function setupEventBusSubscriptions() {
+    // v3.0: History events (undo/redo)
+    eventBus.on('history.changed', (stats) => {
+        updateHistoryButtons();
+    });
+
     // Layer events
     eventBus.on('layer.created', ({ layerId, layer }) => {
         console.log('Layer created:', layerId);
@@ -355,6 +366,24 @@ function setupMapClickHandler() {
  * Setup event listeners (DOM events only, EventBus subscriptions are in setupEventBusSubscriptions)
  */
 function setupEventListeners() {
+    // v3.0: Undo/Redo Buttons
+    document.getElementById('undoBtn').addEventListener('click', handleUndo);
+    document.getElementById('redoBtn').addEventListener('click', handleRedo);
+
+    // v3.0: Keyboard Shortcuts
+    document.addEventListener('keydown', (e) => {
+        // Ctrl+Z / Cmd+Z: Undo
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+            e.preventDefault();
+            handleUndo();
+        }
+        // Ctrl+Y / Cmd+Shift+Z: Redo
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+            e.preventDefault();
+            handleRedo();
+        }
+    });
+
     // Quick Action Buttons
     document.getElementById('showUploadBtn').addEventListener('click', () => modalManager.show('uploadModal'));
     document.getElementById('showSearchBtn').addEventListener('click', () => modalManager.show('searchModal'));
@@ -922,6 +951,60 @@ function handleDeleteGroup(groupId, groupName) {
     updateLayerGroupList();
     updateLayerList(layerManager.getAllLayers());
     saveToFirebase();
+}
+
+/**
+ * v3.0: Handle undo action
+ */
+function handleUndo() {
+    if (!commandHistory || !commandHistory.canUndo()) return;
+
+    const description = commandHistory.getUndoDescription();
+    if (commandHistory.undo()) {
+        toastManager.success(`Undone: ${description}`);
+        updateLayerGroupList();
+        updateLayerList(layerManager.getAllLayers());
+        saveToFirebase();
+    }
+}
+
+/**
+ * v3.0: Handle redo action
+ */
+function handleRedo() {
+    if (!commandHistory || !commandHistory.canRedo()) return;
+
+    const description = commandHistory.getRedoDescription();
+    if (commandHistory.redo()) {
+        toastManager.success(`Redone: ${description}`);
+        updateLayerGroupList();
+        updateLayerList(layerManager.getAllLayers());
+        saveToFirebase();
+    }
+}
+
+/**
+ * v3.0: Update undo/redo button states
+ */
+function updateHistoryButtons() {
+    if (!commandHistory) return;
+
+    const undoBtn = document.getElementById('undoBtn');
+    const redoBtn = document.getElementById('redoBtn');
+
+    if (undoBtn) {
+        undoBtn.disabled = !commandHistory.canUndo();
+        undoBtn.title = commandHistory.canUndo()
+            ? `Undo: ${commandHistory.getUndoDescription()} (Ctrl+Z)`
+            : 'Undo (Ctrl+Z)';
+    }
+
+    if (redoBtn) {
+        redoBtn.disabled = !commandHistory.canRedo();
+        redoBtn.title = commandHistory.canRedo()
+            ? `Redo: ${commandHistory.getRedoDescription()} (Ctrl+Y)`
+            : 'Redo (Ctrl+Y)';
+    }
 }
 
 /**
@@ -2075,6 +2158,15 @@ function createLayerItem(layer) {
     const opacity = layer.opacity !== undefined ? layer.opacity : 1.0;
     const opacityPercent = Math.round(opacity * 100);
 
+    // v3.0: Calculate area for polygon layers
+    let areaDisplay = '';
+    if (layer.type === 'polygon' && layer.features.length > 0) {
+        const totalArea = Utils.calculateTotalArea(layer.features);
+        if (totalArea > 0) {
+            areaDisplay = `<span class="layer-area" title="Total area">📐 ${Utils.formatArea(totalArea)}</span>`;
+        }
+    }
+
     div.innerHTML = `
         <div class="layer-header">
             <span class="drag-handle" title="Drag to reorder or move to group">⠿</span>
@@ -2083,6 +2175,7 @@ function createLayerItem(layer) {
                 <input type="checkbox" class="layer-checkbox" ${layer.visible ? 'checked' : ''}>
                 <span class="layer-name" title="${layer.name}">${layer.name}</span>
                 <span class="layer-count">${layer.features.length}</span>
+                ${areaDisplay}
             </div>
             <div class="layer-opacity-control">
                 <input type="range" class="opacity-slider" min="0" max="100" value="${opacityPercent}" title="Opacity: ${opacityPercent}%">
