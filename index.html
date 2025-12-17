@@ -42,6 +42,9 @@
                     <button class="sidebar-tab" data-tab="analytics">
                         <span>📊</span> Analytics
                     </button>
+                    <button class="sidebar-tab" data-tab="activity">
+                        <span>📋</span> Activity
+                    </button>
                 </div>
 
                 <!-- Layers Tab Content -->
@@ -112,6 +115,23 @@
                         <div id="analyticsContent" class="analytics-content">
                             <div class="analytics-loading">
                                 <p>Loading analytics...</p>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Activity Tab Content (v3.0 Phase 3) -->
+                <div id="activityTab" class="tab-content">
+                    <section class="panel">
+                        <div class="panel-header">
+                            <h2>Activity Log</h2>
+                            <button id="exportActivityJSONBtn" class="icon-btn" title="Export JSON">📥</button>
+                            <button id="exportActivityCSVBtn" class="icon-btn" title="Export CSV">📊</button>
+                            <button id="clearActivityBtn" class="icon-btn" title="Clear All">🗑️</button>
+                        </div>
+                        <div id="activityLogContent" class="activity-content">
+                            <div class="activity-loading">
+                                <p>Loading activity...</p>
                             </div>
                         </div>
                     </section>
@@ -629,6 +649,7 @@
     <script src="js/command-history.js"></script>
     <script src="js/analytics-panel.js"></script>
     <script src="js/distance-tool.js"></script>
+    <script src="js/activity-log.js"></script>
 
     <!-- Main application controller -->
     <script src="js/app.js"></script>

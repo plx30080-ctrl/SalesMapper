@@ -11,6 +11,7 @@ let geocodingService;
 let commandHistory; // v3.0: Undo/Redo functionality
 let analyticsPanel; // v3.0: Analytics dashboard
 let distanceTool; // v3.0: Distance measurement
+let activityLog; // v3.0 Phase 3: Activity tracking
 
 // Global state for UI interactions
 let currentLayerForActions = null;  // Currently selected layer for context menu actions
@@ -128,6 +129,11 @@ async function initializeApp() {
         // v3.0: Initialize distance measurement tool
         distanceTool = new DistanceTool(mapManager);
         console.log('Distance Tool initialized (v3.0)');
+
+        // v3.0 Phase 3: Initialize activity log
+        activityLog = new ActivityLog(stateManager);
+        activityLog.initialize();
+        console.log('Activity Log initialized (v3.0 Phase 3)');
 
         // Setup map callbacks for feature selection and drawing
         setupMapCallbacks();
@@ -577,6 +583,28 @@ function setupEventListeners() {
         if (analyticsPanel) {
             analyticsPanel.exportMetrics();
             toastManager.success('Analytics exported');
+        }
+    });
+
+    // v3.0: Activity Log Actions
+    document.getElementById('exportActivityJSONBtn').addEventListener('click', () => {
+        if (activityLog) {
+            activityLog.exportJSON();
+        }
+    });
+
+    document.getElementById('exportActivityCSVBtn').addEventListener('click', () => {
+        if (activityLog) {
+            activityLog.exportCSV();
+        }
+    });
+
+    document.getElementById('clearActivityBtn').addEventListener('click', () => {
+        if (activityLog) {
+            if (confirm('Are you sure you want to clear all activity history? This cannot be undone.')) {
+                activityLog.clear();
+                toastManager.success('Activity history cleared');
+            }
         }
     });
 
@@ -1091,6 +1119,11 @@ function switchTab(tabName) {
     // Render analytics if switching to analytics tab
     if (tabName === 'analytics' && analyticsPanel) {
         analyticsPanel.render();
+    }
+
+    // Render activity log if switching to activity tab
+    if (tabName === 'activity' && activityLog) {
+        activityLog.render();
     }
 }
 
