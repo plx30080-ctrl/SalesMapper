@@ -159,6 +159,40 @@ body {
     color: white;
 }
 
+/* ===== History Controls (Undo/Redo) ===== */
+.history-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.history-controls .btn-icon {
+    padding: 0.5rem;
+    font-size: 1.2rem;
+    line-height: 1;
+    min-width: auto;
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.8);
+    transition: var(--transition);
+}
+
+.history-controls .btn-icon:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.history-controls .btn-icon:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
 .btn-icon {
     padding: 0.35rem 0.5rem;
     font-size: 1rem;
@@ -465,6 +499,35 @@ body {
     color: var(--text-primary);
 }
 
+.group-action-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.875rem;
+    padding: 0.25rem;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
+    opacity: 0.6;
+}
+
+.group-action-btn:hover {
+    background-color: var(--bg-tertiary);
+    opacity: 1;
+}
+
+.group-rename-btn:hover {
+    background-color: #e3f2fd;
+}
+
+.group-delete-btn:hover {
+    background-color: #ffebee;
+}
+
 .layer-group-layers {
     padding: 0 0.5rem 0.5rem 1.5rem;
     display: flex;
@@ -698,6 +761,18 @@ body {
     border-radius: 10px;
     flex-shrink: 0;
     font-weight: 500;
+}
+
+/* v3.0: Territory area display */
+.layer-area {
+    font-size: 0.7rem;
+    color: var(--secondary-color);
+    background-color: rgba(80, 230, 255, 0.1);
+    padding: 0.125rem 0.4rem;
+    border-radius: 10px;
+    flex-shrink: 0;
+    font-weight: 500;
+    margin-left: 0.25rem;
 }
 
 .layer-reorder-btns {
@@ -2223,4 +2298,308 @@ body {
 .quick-actions .btn.active:hover {
     background: linear-gradient(135deg, #e55a2b, #e08316);
     transform: translateY(-2px);
+}
+
+/* ===== v3.0: Sidebar Tabs ===== */
+.sidebar-tabs {
+    display: flex;
+    background: var(--bg-tertiary);
+    border-bottom: 2px solid var(--border-color);
+    padding: 0.5rem;
+    gap: 0.5rem;
+}
+
+.sidebar-tab {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.sidebar-tab:hover {
+    background: rgba(255, 255, 255, 0.5);
+    color: var(--text-primary);
+}
+
+.sidebar-tab.active {
+    background: var(--bg-primary);
+    color: var(--primary-color);
+    box-shadow: var(--shadow-sm);
+}
+
+.tab-content {
+    display: none;
+    animation: fadeIn 0.3s ease;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ===== v3.0: Analytics Panel ===== */
+.analytics-content {
+    padding: 1rem;
+    max-height: calc(100vh - 200px);
+    overflow-y: auto;
+}
+
+.analytics-loading {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-muted);
+}
+
+.analytics-section {
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.analytics-section:last-child {
+    border-bottom: none;
+}
+
+.analytics-section h3 {
+    font-size: 1.1rem;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.analytics-section h4 {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    margin: 1rem 0 0.5rem;
+}
+
+.analytics-empty-state {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--text-muted);
+}
+
+.analytics-empty-state p {
+    margin: 0.5rem 0;
+}
+
+/* Metrics Grid */
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.75rem;
+    margin: 1rem 0;
+}
+
+.metric-card {
+    background: var(--bg-secondary);
+    padding: 1rem;
+    border-radius: var(--radius);
+    text-align: center;
+    transition: var(--transition);
+    border: 1px solid var(--border-light);
+}
+
+.metric-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
+}
+
+.metric-card.highlight {
+    background: linear-gradient(135deg, #0078d4, #00a2e8);
+    color: white;
+    border: none;
+}
+
+.metric-card.highlight .metric-value,
+.metric-card.highlight .metric-label {
+    color: white;
+}
+
+.metric-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    line-height: 1.2;
+    margin-bottom: 0.25rem;
+}
+
+.metric-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+}
+
+/* Territory Rankings */
+.territory-rankings {
+    margin-top: 1rem;
+}
+
+.ranking-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    margin-bottom: 0.5rem;
+    transition: var(--transition);
+}
+
+.ranking-item:hover {
+    background: var(--bg-tertiary);
+    transform: translateX(4px);
+}
+
+.rank {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    min-width: 35px;
+}
+
+.territory-name {
+    flex: 1;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.territory-value {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--success-color);
+}
+
+/* Layer Metrics Table */
+.layer-metrics-table {
+    overflow-x: auto;
+    margin: 1rem 0;
+}
+
+.layer-metrics-table table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.layer-metrics-table th {
+    background: var(--bg-secondary);
+    padding: 0.75rem 0.5rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-secondary);
+    border-bottom: 2px solid var(--border-color);
+    white-space: nowrap;
+}
+
+.layer-metrics-table td {
+    padding: 0.75rem 0.5rem;
+    border-bottom: 1px solid var(--border-light);
+    color: var(--text-primary);
+}
+
+.layer-metrics-table tr:hover {
+    background: var(--bg-secondary);
+}
+
+.layer-name-cell {
+    font-weight: 500;
+    color: var(--primary-color);
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Coverage Details */
+.coverage-details {
+    margin-top: 1rem;
+}
+
+.coverage-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    margin-bottom: 0.5rem;
+    font-size: 0.85rem;
+}
+
+.coverage-item strong {
+    color: var(--text-primary);
+    margin-right: 0.5rem;
+}
+
+.coverage-value {
+    font-weight: 600;
+    color: var(--secondary-color);
+}
+
+/* ===== v3.0: Distance Measurement Tool ===== */
+.measurement-instructions {
+    position: absolute;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-primary);
+    border: 2px solid var(--primary-color);
+    border-radius: var(--radius);
+    padding: 1rem 1.5rem;
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+.instructions-content {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.instructions-icon {
+    font-size: 2rem;
+}
+
+.instructions-text {
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    font-weight: 500;
 }

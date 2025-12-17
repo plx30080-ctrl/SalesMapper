@@ -445,6 +445,109 @@ const Utils = {
             Math.sin(dLon / 2) * Math.sin(dLon / 2);
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c;
+    },
+
+    /**
+     * v3.0: Calculate area of a polygon using Google Maps Geometry library
+     * @param {Object} feature - GeoJSON feature with polygon geometry
+     * @returns {number} Area in square meters
+     */
+    calculatePolygonArea(feature) {
+        if (!feature || !feature.geometry || !feature.geometry.coordinates) {
+            return 0;
+        }
+
+        const coordinates = feature.geometry.coordinates;
+        if (!coordinates || coordinates.length === 0) {
+            return 0;
+        }
+
+        // Use Google Maps Geometry library if available
+        if (typeof google !== 'undefined' && google.maps && google.maps.geometry) {
+            // Convert coordinates to LatLng array
+            const path = coordinates[0].map(coord => ({
+                lat: coord[1],
+                lng: coord[0]
+            }));
+
+            // Calculate area using Google Maps computeArea
+            return google.maps.geometry.spherical.computeArea(path);
+        }
+
+        // Fallback: Simple spherical area calculation
+        return this.sphericalPolygonArea(coordinates[0]);
+    },
+
+    /**
+     * v3.0: Calculate polygon area using spherical geometry (fallback)
+     * @param {Array} coords - Array of [lng, lat] coordinates
+     * @returns {number} Area in square meters
+     */
+    sphericalPolygonArea(coords) {
+        const EARTH_RADIUS = 6378137; // meters
+        let area = 0;
+
+        if (coords.length > 2) {
+            for (let i = 0; i < coords.length - 1; i++) {
+                const p1 = coords[i];
+                const p2 = coords[i + 1];
+                area += (p2[0] - p1[0]) * Math.PI / 180 *
+                    (2 + Math.sin(p1[1] * Math.PI / 180) + Math.sin(p2[1] * Math.PI / 180));
+            }
+            area = Math.abs(area * EARTH_RADIUS * EARTH_RADIUS / 2);
+        }
+
+        return area;
+    },
+
+    /**
+     * v3.0: Format area for display
+     * @param {number} squareMeters - Area in square meters
+     * @param {string} unit - 'metric' or 'imperial'
+     * @returns {string} Formatted area string
+     */
+    formatArea(squareMeters, unit = 'imperial') {
+        if (!squareMeters || squareMeters === 0) {
+            return '0';
+        }
+
+        if (unit === 'imperial') {
+            // Convert to square miles
+            const squareMiles = squareMeters / 2589988.11;
+            if (squareMiles < 0.01) {
+                // Show in acres for small areas
+                const acres = squareMeters / 4046.86;
+                return `${acres.toFixed(2)} acres`;
+            }
+            return `${squareMiles.toFixed(2)} sq mi`;
+        } else {
+            // Metric: square kilometers
+            const squareKm = squareMeters / 1000000;
+            if (squareKm < 0.01) {
+                // Show in hectares for small areas
+                const hectares = squareMeters / 10000;
+                return `${hectares.toFixed(2)} ha`;
+            }
+            return `${squareKm.toFixed(2)} sq km`;
+        }
+    },
+
+    /**
+     * v3.0: Calculate total area for multiple polygons
+     * @param {Array} features - Array of polygon features
+     * @returns {number} Total area in square meters
+     */
+    calculateTotalArea(features) {
+        if (!features || features.length === 0) {
+            return 0;
+        }
+
+        return features.reduce((total, feature) => {
+            if (feature.geometry && feature.geometry.type === 'Polygon') {
+                return total + this.calculatePolygonArea(feature);
+            }
+            return total;
+        }, 0);
     }
 };
 

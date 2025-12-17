@@ -8,6 +8,9 @@ let mapManager;
 let layerManager;
 let csvParser;
 let geocodingService;
+let commandHistory; // v3.0: Undo/Redo functionality
+let analyticsPanel; // v3.0: Analytics dashboard
+let distanceTool; // v3.0: Distance measurement
 
 // Global state for UI interactions
 let currentLayerForActions = null;  // Currently selected layer for context menu actions
@@ -113,12 +116,26 @@ async function initializeApp() {
         csvParser = new CSVParser();
         geocodingService = new GeocodingService();
 
+        // v3.0: Initialize command history for undo/redo
+        commandHistory = new CommandHistory(50); // 50-step history
+        console.log('Command history initialized (v3.0)');
+
+        // v3.0: Initialize analytics panel
+        analyticsPanel = new AnalyticsPanel(layerManager, stateManager);
+        analyticsPanel.initialize();
+        console.log('Analytics Panel initialized (v3.0)');
+
+        // v3.0: Initialize distance measurement tool
+        distanceTool = new DistanceTool(mapManager);
+        console.log('Distance Tool initialized (v3.0)');
+
         // Setup map callbacks for feature selection and drawing
         setupMapCallbacks();
 
         // Store managers in StateManager for access
         stateManager.set('mapManager', mapManager, true);
         stateManager.set('layerManager', layerManager, true);
+        stateManager.set('commandHistory', commandHistory, true);
 
         // Initialize plugin system
         initializePluginSystem();
@@ -179,6 +196,11 @@ function initializePluginSystem() {
  * Setup EventBus subscriptions (replaces old callback pattern)
  */
 function setupEventBusSubscriptions() {
+    // v3.0: History events (undo/redo)
+    eventBus.on('history.changed', (stats) => {
+        updateHistoryButtons();
+    });
+
     // Layer events
     eventBus.on('layer.created', ({ layerId, layer }) => {
         console.log('Layer created:', layerId);
@@ -355,11 +377,54 @@ function setupMapClickHandler() {
  * Setup event listeners (DOM events only, EventBus subscriptions are in setupEventBusSubscriptions)
  */
 function setupEventListeners() {
+    // v3.0: Undo/Redo Buttons
+    document.getElementById('undoBtn').addEventListener('click', handleUndo);
+    document.getElementById('redoBtn').addEventListener('click', handleRedo);
+
+    // v3.0: Keyboard Shortcuts
+    document.addEventListener('keydown', (e) => {
+        // Ctrl+Z / Cmd+Z: Undo
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+            e.preventDefault();
+            handleUndo();
+        }
+        // Ctrl+Y / Cmd+Shift+Z: Redo
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+            e.preventDefault();
+            handleRedo();
+        }
+    });
+
     // Quick Action Buttons
     document.getElementById('showUploadBtn').addEventListener('click', () => modalManager.show('uploadModal'));
     document.getElementById('showSearchBtn').addEventListener('click', () => modalManager.show('searchModal'));
     document.getElementById('showDrawToolsBtn').addEventListener('click', () => modalManager.show('drawToolsModal'));
+    document.getElementById('measureDistanceBtn').addEventListener('click', () => {
+        if (distanceTool) {
+            distanceTool.toggle();
+            // Toggle button active state
+            const btn = document.getElementById('measureDistanceBtn');
+            btn.classList.toggle('active', distanceTool.isActive);
+
+            if (distanceTool.isActive) {
+                toastManager.info('Click two points on the map to measure distance');
+            }
+        }
+    });
     document.getElementById('showFilterBtn').addEventListener('click', () => modalManager.show('filterModal'));
+
+    // v3.0: Distance Measurement Controls
+    document.getElementById('clearMeasurementBtn').addEventListener('click', () => {
+        if (distanceTool) {
+            distanceTool.clearCurrent();
+        }
+    });
+    document.getElementById('closeMeasurementBtn').addEventListener('click', () => {
+        if (distanceTool) {
+            distanceTool.deactivate();
+            document.getElementById('measureDistanceBtn').classList.remove('active');
+        }
+    });
 
     // CSV Upload
     document.getElementById('uploadBtn').addEventListener('click', handleCSVUpload);
@@ -482,6 +547,39 @@ function setupEventListeners() {
     document.getElementById('confirmMoveBtn').addEventListener('click', handleMoveFeature);
     document.getElementById('cancelMoveBtn').addEventListener('click', () => modalManager.close('moveFeatureModal'));
 
+    // Add Layer Modal
+    document.getElementById('createBlankLayerBtn').addEventListener('click', () => {
+        modalManager.close('addLayerModal');
+        handleCreateBlankLayer();
+    });
+    document.getElementById('uploadDataBtn').addEventListener('click', () => {
+        modalManager.close('addLayerModal');
+        modalManager.show('uploadModal');
+    });
+
+    // v3.0: Sidebar Tab Switching
+    document.querySelectorAll('.sidebar-tab').forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            const tabName = e.currentTarget.dataset.tab;
+            switchTab(tabName);
+        });
+    });
+
+    // v3.0: Analytics Actions
+    document.getElementById('refreshAnalyticsBtn').addEventListener('click', () => {
+        if (analyticsPanel) {
+            analyticsPanel.render();
+            toastManager.success('Analytics refreshed');
+        }
+    });
+
+    document.getElementById('exportAnalyticsBtn').addEventListener('click', () => {
+        if (analyticsPanel) {
+            analyticsPanel.exportMetrics();
+            toastManager.success('Analytics exported');
+        }
+    });
+
     // Modal close buttons
     document.querySelectorAll('.close').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -507,15 +605,7 @@ function setupEventListeners() {
  * Handle add layer button click - offers choice to create blank or upload
  */
 function handleAddLayerClick() {
-    const choice = confirm('Create a blank layer?\n\nClick OK to create a blank layer, or Cancel to upload data from a file.');
-
-    if (choice) {
-        // Create blank layer
-        handleCreateBlankLayer();
-    } else {
-        // Upload data
-        modalManager.show('uploadModal');
-    }
+    modalManager.show('addLayerModal');
 }
 
 /**
@@ -649,6 +739,10 @@ function updateLayerGroupList() {
                 <div class="layer-opacity-control">
                     <input type="range" class="group-opacity-slider" min="0" max="100" value="${groupOpacityPercent}" title="Group Opacity: ${groupOpacityPercent}%">
                 </div>
+                ${!isAllLayers ? `
+                    <button class="group-action-btn group-rename-btn" title="Rename Group">✏️</button>
+                    <button class="group-action-btn group-delete-btn" title="Delete Group">🗑️</button>
+                ` : ''}
             </div>
             <div class="layer-group-layers" style="display: ${isExpanded ? 'block' : 'none'};">
                 <!-- Nested layers will be added here -->
@@ -687,11 +781,32 @@ function updateLayerGroupList() {
             setGroupOpacity(group.id, newOpacity);
         });
 
+        // Rename group button
+        if (!isAllLayers) {
+            const renameBtn = groupItem.querySelector('.group-rename-btn');
+            if (renameBtn) {
+                renameBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    handleRenameGroup(group.id, group.name);
+                });
+            }
+
+            // Delete group button
+            const deleteBtn = groupItem.querySelector('.group-delete-btn');
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    handleDeleteGroup(group.id, group.name);
+                });
+            }
+        }
+
         // Select group (click on name area)
         groupHeader.addEventListener('click', (e) => {
             if (!e.target.classList.contains('layer-group-toggle') &&
                 !e.target.classList.contains('group-opacity-slider') &&
-                !e.target.classList.contains('group-expand-btn')) {
+                !e.target.classList.contains('group-expand-btn') &&
+                !e.target.classList.contains('group-action-btn')) {
                 selectGroup(group.id);
             }
         });
@@ -852,6 +967,131 @@ function selectGroup(groupId) {
     }
     updateLayerGroupList();
     updateLayerList(layerManager.getAllLayers());
+}
+
+/**
+ * Handle renaming a layer group
+ */
+function handleRenameGroup(groupId, currentName) {
+    const newName = prompt('Enter new group name:', currentName);
+    if (!newName || newName.trim() === '' || newName === currentName) {
+        return;
+    }
+
+    layerManager.renameLayerGroup(groupId, newName.trim());
+    toastManager.success(`Renamed group to "${newName}"`);
+    updateLayerGroupList();
+    saveToFirebase();
+}
+
+/**
+ * Handle deleting a layer group
+ */
+function handleDeleteGroup(groupId, groupName) {
+    const group = layerManager.getLayerGroup(groupId);
+    if (!group) return;
+
+    const layerCount = (group.layerIds || []).length;
+    const message = layerCount > 0
+        ? `Delete group "${groupName}"?\n\nThis will ungroup ${layerCount} layer(s). The layers will not be deleted.`
+        : `Delete group "${groupName}"?`;
+
+    if (!confirm(message)) {
+        return;
+    }
+
+    // If this was the active group, clear selection
+    if (stateManager.get('activeGroup') === groupId) {
+        stateManager.set('activeGroup', null);
+    }
+
+    layerManager.deleteLayerGroup(groupId);
+    toastManager.success(`Deleted group "${groupName}"`);
+    updateLayerGroupList();
+    updateLayerList(layerManager.getAllLayers());
+    saveToFirebase();
+}
+
+/**
+ * v3.0: Handle undo action
+ */
+function handleUndo() {
+    if (!commandHistory || !commandHistory.canUndo()) return;
+
+    const description = commandHistory.getUndoDescription();
+    if (commandHistory.undo()) {
+        toastManager.success(`Undone: ${description}`);
+        updateLayerGroupList();
+        updateLayerList(layerManager.getAllLayers());
+        saveToFirebase();
+    }
+}
+
+/**
+ * v3.0: Handle redo action
+ */
+function handleRedo() {
+    if (!commandHistory || !commandHistory.canRedo()) return;
+
+    const description = commandHistory.getRedoDescription();
+    if (commandHistory.redo()) {
+        toastManager.success(`Redone: ${description}`);
+        updateLayerGroupList();
+        updateLayerList(layerManager.getAllLayers());
+        saveToFirebase();
+    }
+}
+
+/**
+ * v3.0: Update undo/redo button states
+ */
+function updateHistoryButtons() {
+    if (!commandHistory) return;
+
+    const undoBtn = document.getElementById('undoBtn');
+    const redoBtn = document.getElementById('redoBtn');
+
+    if (undoBtn) {
+        undoBtn.disabled = !commandHistory.canUndo();
+        undoBtn.title = commandHistory.canUndo()
+            ? `Undo: ${commandHistory.getUndoDescription()} (Ctrl+Z)`
+            : 'Undo (Ctrl+Z)';
+    }
+
+    if (redoBtn) {
+        redoBtn.disabled = !commandHistory.canRedo();
+        redoBtn.title = commandHistory.canRedo()
+            ? `Redo: ${commandHistory.getRedoDescription()} (Ctrl+Y)`
+            : 'Redo (Ctrl+Y)';
+    }
+}
+
+/**
+ * v3.0: Switch between sidebar tabs
+ */
+function switchTab(tabName) {
+    // Update tab buttons
+    document.querySelectorAll('.sidebar-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.tab === tabName);
+    });
+
+    // Update tab content
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+
+    const targetTab = document.getElementById(`${tabName}Tab`);
+    if (targetTab) {
+        targetTab.classList.add('active');
+    }
+
+    // Update state
+    stateManager.set('activeTab', tabName);
+
+    // Render analytics if switching to analytics tab
+    if (tabName === 'analytics' && analyticsPanel) {
+        analyticsPanel.render();
+    }
 }
 
 /**
@@ -2005,6 +2245,15 @@ function createLayerItem(layer) {
     const opacity = layer.opacity !== undefined ? layer.opacity : 1.0;
     const opacityPercent = Math.round(opacity * 100);
 
+    // v3.0: Calculate area for polygon layers
+    let areaDisplay = '';
+    if (layer.type === 'polygon' && layer.features.length > 0) {
+        const totalArea = Utils.calculateTotalArea(layer.features);
+        if (totalArea > 0) {
+            areaDisplay = `<span class="layer-area" title="Total area">📐 ${Utils.formatArea(totalArea)}</span>`;
+        }
+    }
+
     div.innerHTML = `
         <div class="layer-header">
             <span class="drag-handle" title="Drag to reorder or move to group">⠿</span>
@@ -2013,6 +2262,7 @@ function createLayerItem(layer) {
                 <input type="checkbox" class="layer-checkbox" ${layer.visible ? 'checked' : ''}>
                 <span class="layer-name" title="${layer.name}">${layer.name}</span>
                 <span class="layer-count">${layer.features.length}</span>
+                ${areaDisplay}
             </div>
             <div class="layer-opacity-control">
                 <input type="range" class="opacity-slider" min="0" max="100" value="${opacityPercent}" title="Opacity: ${opacityPercent}%">
@@ -3554,13 +3804,17 @@ async function switchProfile(profileId, showLoading = true) {
             if (result.layers._groups) {
                 result.layers._groups.forEach(g => {
                     layerManager.layerGroups.set(g.id, g);
+                    // If this is the default "All Layers" group, set it in state
+                    if (g.metadata && g.metadata.isDefault) {
+                        stateManager.set('allLayersGroupId', g.id, true);
+                    }
                 });
                 delete result.layers._groups;
             }
 
             layerManager.importLayers(result.layers);
 
-            // Ensure "All Layers" group exists
+            // Ensure "All Layers" group exists (will use existing if found above)
             ensureDefaultLayerGroup();
 
             // Re-apply styling

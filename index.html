@@ -21,6 +21,10 @@
                     </select>
                     <button id="manageProfilesBtn" class="btn btn-icon" title="Manage Workspaces">⚙️</button>
                 </div>
+                <div class="history-controls">
+                    <button id="undoBtn" class="btn btn-icon" title="Undo (Ctrl+Z)" disabled>↶</button>
+                    <button id="redoBtn" class="btn btn-icon" title="Redo (Ctrl+Y)" disabled>↷</button>
+                </div>
                 <button id="saveToFirebase" class="btn btn-primary">Save to Firebase</button>
                 <button id="loadFromFirebase" class="btn btn-secondary">Load from Firebase</button>
             </div>
@@ -30,56 +34,88 @@
         <div class="main-content">
             <!-- Sidebar -->
             <aside class="sidebar">
-                <!-- Quick Actions -->
-                <section class="panel compact">
-                    <div class="quick-actions">
-                        <button id="showUploadBtn" class="btn btn-small" title="Import CSV/Excel files">
-                            <span>📤</span>Upload
-                        </button>
-                        <button id="showSearchBtn" class="btn btn-small" title="Search for an address">
-                            <span>🔍</span>Search
-                        </button>
-                        <button id="showDrawToolsBtn" class="btn btn-small" title="Draw points or polygons">
-                            <span>✏️</span>Draw
-                        </button>
-                        <button id="showFilterBtn" class="btn btn-small" title="Filter and sort layers">
-                            <span>⚙️</span>Filter
-                        </button>
-                        <button id="showPluginsBtn" class="btn btn-small" title="Manage plugins">
-                            <span>🔌</span>Plugins
-                        </button>
-                    </div>
-                </section>
+                <!-- Sidebar Tabs (v3.0) -->
+                <div class="sidebar-tabs">
+                    <button class="sidebar-tab active" data-tab="layers">
+                        <span>📁</span> Layers
+                    </button>
+                    <button class="sidebar-tab" data-tab="analytics">
+                        <span>📊</span> Analytics
+                    </button>
+                </div>
 
-                <!-- Layer Groups -->
-                <section class="panel">
-                    <div class="panel-header">
-                        <h2>Layer Groups</h2>
-                        <button id="addGroupBtn" class="icon-btn" title="Add group">+</button>
-                    </div>
-                    <div id="layerGroupList" class="layer-group-list">
-                        <!-- Layer groups will be dynamically added here -->
-                    </div>
-                </section>
+                <!-- Layers Tab Content -->
+                <div id="layersTab" class="tab-content active">
+                    <!-- Quick Actions -->
+                    <section class="panel compact">
+                        <div class="quick-actions">
+                            <button id="showUploadBtn" class="btn btn-small" title="Import CSV/Excel files">
+                                <span>📤</span>Upload
+                            </button>
+                            <button id="showSearchBtn" class="btn btn-small" title="Search for an address">
+                                <span>🔍</span>Search
+                            </button>
+                            <button id="showDrawToolsBtn" class="btn btn-small" title="Draw points or polygons">
+                                <span>✏️</span>Draw
+                            </button>
+                            <button id="measureDistanceBtn" class="btn btn-small" title="Measure distance (v3.0)">
+                                <span>📏</span>Measure
+                            </button>
+                            <button id="showFilterBtn" class="btn btn-small" title="Filter and sort layers">
+                                <span>⚙️</span>Filter
+                            </button>
+                            <button id="showPluginsBtn" class="btn btn-small" title="Manage plugins">
+                                <span>🔌</span>Plugins
+                            </button>
+                        </div>
+                    </section>
 
-                <!-- Layers Section -->
-                <section class="panel">
-                    <div class="panel-header">
-                        <h2>Layers</h2>
-                        <button id="addLayerBtn" class="icon-btn" title="Add layer">+</button>
-                    </div>
-                    <div id="layerList" class="layer-list">
-                        <!-- Layers will be dynamically added here -->
-                    </div>
-                </section>
+                    <!-- Layer Groups -->
+                    <section class="panel">
+                        <div class="panel-header">
+                            <h2>Layer Groups</h2>
+                            <button id="addGroupBtn" class="icon-btn" title="Add group">+</button>
+                        </div>
+                        <div id="layerGroupList" class="layer-group-list">
+                            <!-- Layer groups will be dynamically added here -->
+                        </div>
+                    </section>
 
-                <!-- Feature Info Section -->
-                <section class="panel">
-                    <h2>Selected Feature</h2>
-                    <div id="featureInfo" class="feature-info">
-                        <p class="empty-state">Click on a feature to see details</p>
-                    </div>
-                </section>
+                    <!-- Layers Section -->
+                    <section class="panel">
+                        <div class="panel-header">
+                            <h2>Layers</h2>
+                            <button id="addLayerBtn" class="icon-btn" title="Add layer">+</button>
+                        </div>
+                        <div id="layerList" class="layer-list">
+                            <!-- Layers will be dynamically added here -->
+                        </div>
+                    </section>
+
+                    <!-- Feature Info Section -->
+                    <section class="panel">
+                        <h2>Selected Feature</h2>
+                        <div id="featureInfo" class="feature-info">
+                            <p class="empty-state">Click on a feature to see details</p>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Analytics Tab Content (v3.0) -->
+                <div id="analyticsTab" class="tab-content">
+                    <section class="panel">
+                        <div class="panel-header">
+                            <h2>Territory Analytics</h2>
+                            <button id="refreshAnalyticsBtn" class="icon-btn" title="Refresh">↻</button>
+                            <button id="exportAnalyticsBtn" class="icon-btn" title="Export Metrics">📥</button>
+                        </div>
+                        <div id="analyticsContent" class="analytics-content">
+                            <div class="analytics-loading">
+                                <p>Loading analytics...</p>
+                            </div>
+                        </div>
+                    </section>
+                </div>
             </aside>
 
             <!-- Map Container -->
@@ -98,6 +134,16 @@
                     <span class="edit-label">Editing Polygon</span>
                     <button id="savePolygonEdit" class="btn btn-primary btn-small">Save</button>
                     <button id="cancelPolygonEdit" class="btn btn-secondary btn-small">Cancel</button>
+                </div>
+
+                <!-- Distance Measurement Instructions (v3.0) -->
+                <div id="measurementInstructions" class="measurement-instructions" style="display: none;">
+                    <div class="instructions-content">
+                        <span class="instructions-icon">📏</span>
+                        <span class="instructions-text">Click two points on the map to measure distance</span>
+                        <button id="clearMeasurementBtn" class="btn btn-secondary btn-small">Clear</button>
+                        <button id="closeMeasurementBtn" class="btn btn-secondary btn-small">✕</button>
+                    </div>
                 </div>
 
                 <!-- Legend -->
@@ -410,6 +456,27 @@
             </div>
         </div>
 
+        <!-- Add Layer Modal -->
+        <div id="addLayerModal" class="modal">
+            <div class="modal-content modal-small">
+                <div class="modal-header">
+                    <h2>Add Layer</h2>
+                    <span class="close" data-modal="addLayerModal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted">Choose how you want to create a new layer:</p>
+                    <div class="modal-actions" style="flex-direction: column; gap: 12px;">
+                        <button id="createBlankLayerBtn" class="btn btn-primary" style="width: 100%;">
+                            Create Blank Layer
+                        </button>
+                        <button id="uploadDataBtn" class="btn btn-secondary" style="width: 100%;">
+                            Upload Data from File
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Style Options Modal -->
         <div id="styleModal" class="modal">
             <div class="modal-content">
@@ -557,6 +624,11 @@
     <script src="js/csv-parser.js"></script>
     <script src="js/map-manager.js"></script>
     <script src="js/layer-manager.js"></script>
+
+    <!-- v3.0 Features -->
+    <script src="js/command-history.js"></script>
+    <script src="js/analytics-panel.js"></script>
+    <script src="js/distance-tool.js"></script>
 
     <!-- Main application controller -->
     <script src="js/app.js"></script>

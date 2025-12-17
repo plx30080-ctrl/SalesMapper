@@ -810,6 +810,23 @@ class LayerManager {
     }
 
     /**
+     * Rename layer group
+     * @param {string} groupId - Group ID
+     * @param {string} newName - New group name
+     */
+    renameLayerGroup(groupId, newName) {
+        const layerGroups = this.layerGroups;
+        const group = layerGroups.get(groupId);
+        if (!group) return;
+
+        group.name = newName;
+        layerGroups.set(groupId, group);
+        this.layerGroups = layerGroups;
+
+        eventBus.emit('group.renamed', { groupId, newName });
+    }
+
+    /**
      * Get layer group
      * @param {string} groupId - Group ID
      * @returns {Object} Group data
