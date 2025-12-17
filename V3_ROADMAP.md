@@ -65,7 +65,35 @@ Transform SalesMapper from a territory mapping tool into a comprehensive busines
 
 - [ ] **Virtual Scrolling** - Handle massive datasets in UI
 - [ ] **Lazy Loading** - Load features on-demand
-- [ ] **Better Marker Clustering** - Optimize clustering algorithm
+- [ ] **Advanced Marker Clustering** - Professional-grade clustering
+  - **Smart Cluster Sizes**: Dynamic sizing based on density
+  - **Custom Cluster Icons**: Show count, use layer colors
+  - **Click Behavior**:
+    * Zoom to cluster bounds on click
+    * Spider-out for small clusters (3-10 markers)
+    * List view modal for large clusters
+  - **Performance**:
+    * GridBased algorithm for 10K+ markers
+    * SuperCluster library integration
+    * Viewport-based rendering
+  - **Visual Improvements**:
+    * Gradient colors by cluster size
+    * Smooth zoom animations
+    * Cluster breakdown on hover (tooltip)
+    * Mini-map preview in cluster
+  - **Layer-Aware Clustering**:
+    * Cluster per layer option
+    * Mixed-layer clusters with color blend
+    * Layer legend integration
+  - **User Controls**:
+    * Cluster size slider (small/medium/large)
+    * Enable/disable per layer
+    * Max zoom level before unclustering
+    * Min points before clustering
+  - **Mobile Optimization**:
+    * Touch-friendly cluster interaction
+    * Larger tap targets
+    * Swipe to navigate clusters
 - [ ] **Data Compression** - Reduce storage costs
 - [ ] **Spatial Indexing** - Fast proximity queries
 - [ ] **Bulk Operations**
@@ -98,6 +126,121 @@ Transform SalesMapper from a territory mapping tool into a comprehensive busines
 - [ ] **Keyboard Navigation** - Full keyboard shortcuts
 - [ ] **Screen Reader Support** - ARIA labels
 - [ ] **Internationalization** - Multi-language support
+
+---
+
+## 🗺️ Marker Clustering Improvement Plan
+
+**Current State:** Using @googlemaps/markerclusterer@2.5.3 with default configuration
+**Problems:** Messy appearance with large datasets, poor visual hierarchy, limited customization
+
+### Proposed Improvements:
+
+#### 1. Visual Design Enhancements
+```javascript
+// Custom cluster renderer with gradient colors
+const clusterSizes = [
+  { count: 10, color: '#4CAF50', size: 40 },      // Small: green
+  { count: 50, color: '#FF9800', size: 50 },      // Medium: orange
+  { count: 100, color: '#F44336', size: 60 },     // Large: red
+  { count: 500, color: '#9C27B0', size: 70 },     // Huge: purple
+];
+
+// Show breakdown on hover (tooltip)
+clusterMarker.title = "10 locations:\n3 North Region\n4 South Region\n3 West Region";
+```
+
+#### 2. Smart Interaction Patterns
+- **< 3 markers**: No clustering, show individual markers
+- **3-10 markers**: Spider-out on click (radial expansion)
+- **10-50 markers**: Zoom to bounds + show list sidebar
+- **50+ markers**: Modal with scrollable list + mini-map
+
+#### 3. Performance Optimizations
+```javascript
+// Use SuperCluster for large datasets
+if (markerCount > 10000) {
+  useSuperCluster({
+    radius: 60,        // Cluster radius in pixels
+    maxZoom: 16,       // Max zoom to cluster
+    minZoom: 0,        // Min zoom to cluster
+    extent: 512,       // Tile extent
+    nodeSize: 64       // KD-tree node size
+  });
+}
+```
+
+#### 4. Layer-Aware Clustering
+- Option 1: Cluster each layer separately (maintains layer colors)
+- Option 2: Mixed clustering with pie chart icons (show layer breakdown)
+- Option 3: Dominant layer coloring (most common layer determines color)
+
+#### 5. User Controls (Settings Panel)
+```javascript
+clusteringOptions = {
+  enabled: true,                    // Master toggle
+  algorithm: 'grid',                // 'grid' | 'supercluster' | 'markerclusterer'
+  clusterRadius: 60,                // pixels (slider: 30-100)
+  minClusterSize: 2,                // min markers to form cluster (slider: 2-10)
+  maxZoom: 16,                      // zoom level to uncluster (slider: 10-20)
+  perLayer: false,                  // cluster per layer vs mixed
+  showCounts: true,                 // show number in cluster
+  animateZoom: true,                // smooth zoom animations
+  spiderfy: true,                   // spider-out small clusters
+  spiderfyMaxMarkers: 10           // max markers for spiderfy
+};
+```
+
+#### 6. Mobile-Specific Improvements
+- Larger cluster tap targets (60px min)
+- Touch-and-hold for cluster preview
+- Swipe gestures to navigate cluster list
+- Bottom sheet UI for cluster contents
+- Haptic feedback on cluster tap
+
+#### 7. Accessibility
+- Screen reader announcements: "Cluster of 15 locations"
+- Keyboard navigation through clusters
+- Focus indicators on clusters
+- ARIA labels with cluster details
+
+### Implementation Phases:
+
+**Phase 4.1 - Core Improvements** (2-3 hours)
+- Custom cluster icons with colors
+- Gradient sizing based on count
+- Spider-out for small clusters
+- Hover tooltips with breakdown
+
+**Phase 4.2 - Performance** (2-3 hours)
+- SuperCluster integration
+- Viewport-based rendering
+- Debounced re-clustering on zoom/pan
+- Web Worker for cluster calculation
+
+**Phase 4.3 - Advanced Features** (3-4 hours)
+- Layer-aware clustering options
+- Settings panel with sliders
+- Cluster list modal
+- Mini-map in cluster tooltip
+
+**Phase 4.4 - Polish** (1-2 hours)
+- Smooth animations
+- Mobile optimizations
+- Accessibility features
+- Performance testing with 100K markers
+
+### Technical Stack:
+- **Primary**: SuperCluster (https://github.com/mapbox/supercluster)
+- **Fallback**: @googlemaps/markerclusterer (current)
+- **Visualization**: Custom SVG cluster icons
+- **Animation**: GSAP or CSS transitions
+
+### Success Metrics:
+- Load 50K markers in < 2 seconds
+- Smooth 60fps zoom/pan with clusters
+- Cluster accuracy: 95%+ markers correctly grouped
+- User satisfaction: No "messy" complaints
 
 ---
 
