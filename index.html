@@ -58,6 +58,9 @@
                             <button id="showDrawToolsBtn" class="btn btn-small" title="Draw points or polygons">
                                 <span>✏️</span>Draw
                             </button>
+                            <button id="measureDistanceBtn" class="btn btn-small" title="Measure distance (v3.0)">
+                                <span>📏</span>Measure
+                            </button>
                             <button id="showFilterBtn" class="btn btn-small" title="Filter and sort layers">
                                 <span>⚙️</span>Filter
                             </button>
@@ -131,6 +134,16 @@
                     <span class="edit-label">Editing Polygon</span>
                     <button id="savePolygonEdit" class="btn btn-primary btn-small">Save</button>
                     <button id="cancelPolygonEdit" class="btn btn-secondary btn-small">Cancel</button>
+                </div>
+
+                <!-- Distance Measurement Instructions (v3.0) -->
+                <div id="measurementInstructions" class="measurement-instructions" style="display: none;">
+                    <div class="instructions-content">
+                        <span class="instructions-icon">📏</span>
+                        <span class="instructions-text">Click two points on the map to measure distance</span>
+                        <button id="clearMeasurementBtn" class="btn btn-secondary btn-small">Clear</button>
+                        <button id="closeMeasurementBtn" class="btn btn-secondary btn-small">✕</button>
+                    </div>
                 </div>
 
                 <!-- Legend -->
@@ -615,6 +628,7 @@
     <!-- v3.0 Features -->
     <script src="js/command-history.js"></script>
     <script src="js/analytics-panel.js"></script>
+    <script src="js/distance-tool.js"></script>
 
     <!-- Main application controller -->
     <script src="js/app.js"></script>

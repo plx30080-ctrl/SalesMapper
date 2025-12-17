@@ -10,6 +10,7 @@ let csvParser;
 let geocodingService;
 let commandHistory; // v3.0: Undo/Redo functionality
 let analyticsPanel; // v3.0: Analytics dashboard
+let distanceTool; // v3.0: Distance measurement
 
 // Global state for UI interactions
 let currentLayerForActions = null;  // Currently selected layer for context menu actions
@@ -123,6 +124,10 @@ async function initializeApp() {
         analyticsPanel = new AnalyticsPanel(layerManager, stateManager);
         analyticsPanel.initialize();
         console.log('Analytics Panel initialized (v3.0)');
+
+        // v3.0: Initialize distance measurement tool
+        distanceTool = new DistanceTool(mapManager);
+        console.log('Distance Tool initialized (v3.0)');
 
         // Setup map callbacks for feature selection and drawing
         setupMapCallbacks();
@@ -394,7 +399,32 @@ function setupEventListeners() {
     document.getElementById('showUploadBtn').addEventListener('click', () => modalManager.show('uploadModal'));
     document.getElementById('showSearchBtn').addEventListener('click', () => modalManager.show('searchModal'));
     document.getElementById('showDrawToolsBtn').addEventListener('click', () => modalManager.show('drawToolsModal'));
+    document.getElementById('measureDistanceBtn').addEventListener('click', () => {
+        if (distanceTool) {
+            distanceTool.toggle();
+            // Toggle button active state
+            const btn = document.getElementById('measureDistanceBtn');
+            btn.classList.toggle('active', distanceTool.isActive);
+
+            if (distanceTool.isActive) {
+                toastManager.info('Click two points on the map to measure distance');
+            }
+        }
+    });
     document.getElementById('showFilterBtn').addEventListener('click', () => modalManager.show('filterModal'));
+
+    // v3.0: Distance Measurement Controls
+    document.getElementById('clearMeasurementBtn').addEventListener('click', () => {
+        if (distanceTool) {
+            distanceTool.clearCurrent();
+        }
+    });
+    document.getElementById('closeMeasurementBtn').addEventListener('click', () => {
+        if (distanceTool) {
+            distanceTool.deactivate();
+            document.getElementById('measureDistanceBtn').classList.remove('active');
+        }
+    });
 
     // CSV Upload
     document.getElementById('uploadBtn').addEventListener('click', handleCSVUpload);

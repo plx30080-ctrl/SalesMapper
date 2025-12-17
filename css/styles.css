@@ -2561,3 +2561,45 @@ body {
     font-weight: 600;
     color: var(--secondary-color);
 }
+
+/* ===== v3.0: Distance Measurement Tool ===== */
+.measurement-instructions {
+    position: absolute;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-primary);
+    border: 2px solid var(--primary-color);
+    border-radius: var(--radius);
+    padding: 1rem 1.5rem;
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+.instructions-content {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.instructions-icon {
+    font-size: 2rem;
+}
+
+.instructions-text {
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    font-weight: 500;
+}
