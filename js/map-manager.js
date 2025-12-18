@@ -653,8 +653,10 @@ class MapManager {
      * @param {string} layerId - Layer ID
      * @param {Array} features - Array of features
      * @param {string} type - Feature type ('polygon' or 'point')
+     * @param {string} preferredColor - Preferred color for the layer (optional)
+     * @param {boolean} initiallyVisible - Whether the layer should be visible initially (default: true)
      */
-    addFeaturesToLayer(layerId, features, type, preferredColor = null) {
+    addFeaturesToLayer(layerId, features, type, preferredColor = null, initiallyVisible = true) {
         let dataSource = this.dataSources.get(layerId);
 
         // Create data source if it doesn't exist
@@ -708,8 +710,16 @@ class MapManager {
             this.addPointLayer(layerId, color);
         }
 
-        // Fit map to show all features
-        this.fitMapToDataSource(dataLayer);
+        // Immediately hide the layer if it should not be initially visible
+        // This prevents the visual flash when importing hidden layers
+        if (!initiallyVisible) {
+            this.toggleLayerVisibility(layerId, false);
+        }
+
+        // Fit map to show all features (only if visible)
+        if (initiallyVisible) {
+            this.fitMapToDataSource(dataLayer);
+        }
 
         return color;
     }

@@ -667,22 +667,20 @@ class LayerManager {
             // Store layer (don't add to layerOrder yet)
             this.layers.set(layerId, layer);
 
-            // Add to map if there are features and layer is visible
+            // Add to map if there are features
             if (layer.features.length > 0) {
                 // Check if this layer has property-based styling
                 if (layer.styleType && layer.styleProperty && layer.colorMap) {
                     // Will be re-styled by app.js after import
-                    const color = this.mapManager.addFeaturesToLayer(layerId, layer.features, layer.type, layer.color);
+                    // Pass layer.visible to prevent visual flash when loading hidden layers
+                    const color = this.mapManager.addFeaturesToLayer(layerId, layer.features, layer.type, layer.color, layer.visible);
                     layer.color = color;
                 } else {
                     // Normal styling
-                    const color = this.mapManager.addFeaturesToLayer(layerId, layer.features, layer.type, layer.color);
+                    // Pass layer.visible to prevent visual flash when loading hidden layers
+                    const color = this.mapManager.addFeaturesToLayer(layerId, layer.features, layer.type, layer.color, layer.visible);
                     layer.color = color;
                 }
-
-                // IMPORTANT: Always set visibility explicitly to match saved state
-                // This ensures layers don't become visible after Firebase save/load
-                this.mapManager.toggleLayerVisibility(layerId, layer.visible);
 
                 // Set opacity on map
                 if (layer.opacity !== undefined && layer.opacity !== 1.0) {
