@@ -2904,6 +2904,11 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
         const layer = layerManager.getLayer(layerId);
         if (!layer) return;
 
+        // IMPORTANT: Save the layer's visibility state before removing it
+        // This prevents layers from becoming visible during real-time sync
+        const wasVisible = layer.visible !== undefined ? layer.visible : true;
+        const layerOpacity = layer.opacity !== undefined ? layer.opacity : 1.0;
+
         // Find the actual property name (case-insensitive)
         let actualPropertyName = property;
         if (layer.features.length > 0) {
@@ -3122,8 +3127,21 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
             });
         }
 
-        // Fit map to data source
-        mapManager.fitMapToDataSource(dataLayer);
+        // IMPORTANT: Restore the layer's visibility state
+        // This prevents layers from becoming visible during real-time sync
+        if (!wasVisible) {
+            mapManager.toggleLayerVisibility(layerId, false);
+        }
+
+        // Restore opacity
+        if (layerOpacity !== 1.0) {
+            layerManager.setLayerOpacity(layerId, layerOpacity);
+        }
+
+        // Only fit map to data source if the layer is visible
+        if (wasVisible) {
+            mapManager.fitMapToDataSource(dataLayer);
+        }
 
         // Store style info
         layer.styleType = styleType;
