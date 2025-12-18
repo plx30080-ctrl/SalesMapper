@@ -38,13 +38,93 @@ function initDataServices() {
 /**
  * Save current state using StateManager
  * NOTE: In Firebase-only mode, this is now a NO-OP.
- * Layer data is only saved to Firebase. Use "Save to Firebase" button instead.
+ * Layer data is only saved to Firebase. Auto-save handles real-time sync.
  */
 function saveToLocalStorage() {
-    // In Firebase-only mode, this just logs and does nothing
-    // Layer data is only saved to Firebase
-    stateManager.saveToLocalStorage();
-    // Don't show success toast since nothing was actually saved
+    // DEPRECATED: No longer used. Auto-save handles all Firebase persistence.
+    // Trigger auto-save for real-time collaboration
+    autoSaveToFirebase();
+}
+
+/**
+ * Auto-save to Firebase (for real-time collaboration)
+ * Debounced to prevent excessive saves during rapid changes
+ */
+let autoSaveTimeout = null;
+let isSavingToFirebase = false;
+
+async function autoSaveToFirebase() {
+    // Clear any pending auto-save
+    if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+    }
+
+    // Debounce: wait 500ms after last change before saving
+    autoSaveTimeout = setTimeout(async () => {
+        const currentProfile = stateManager.getCurrentProfile();
+
+        if (!currentProfile || isSavingToFirebase) {
+            return;
+        }
+
+        console.log('🔄 Auto-saving to Firebase...');
+        isSavingToFirebase = true;
+
+        // Show sync indicator
+        const syncStatus = document.getElementById('syncStatus');
+        if (syncStatus) {
+            syncStatus.style.display = 'flex';
+        }
+
+        // Temporarily disable listener to prevent feedback loop
+        const wasListening = realtimeListenerEnabled;
+        if (wasListening) {
+            firebaseManager.stopListening();
+            realtimeListenerEnabled = false;
+        }
+
+        try {
+            const layersData = layerManager.exportAllLayers();
+            const groupsData = Array.from(layerManager.layerGroups.values());
+
+            await firebaseManager.saveAllLayers({
+                ...layersData,
+                _groups: groupsData
+            }, currentProfile.name);
+
+            console.log('✅ Auto-save successful');
+
+            // Hide sync indicator after a brief delay
+            setTimeout(() => {
+                if (syncStatus) {
+                    syncStatus.style.display = 'none';
+                }
+            }, 500);
+
+            // Re-enable listener after a short delay
+            if (wasListening) {
+                setTimeout(() => {
+                    enableRealtimeSync();
+                }, 1000);
+            }
+        } catch (error) {
+            console.error('❌ Auto-save error:', error);
+
+            // Hide sync indicator on error
+            if (syncStatus) {
+                syncStatus.style.display = 'none';
+            }
+
+            // Re-enable listener even on error
+            if (wasListening) {
+                setTimeout(() => {
+                    enableRealtimeSync();
+                }, 1000);
+            }
+        } finally {
+            isSavingToFirebase = false;
+        }
+    }, 500); // 500ms debounce
 }
 
 /**
@@ -3620,6 +3700,14 @@ async function handleSaveToFirebase() {
 
     loadingManager.show('Saving to Firebase...');
 
+    // Temporarily disable real-time listener to prevent feedback loop
+    // where saving triggers the listener which re-imports and overwrites changes
+    const wasListening = realtimeListenerEnabled;
+    if (wasListening) {
+        firebaseManager.stopListening();
+        realtimeListenerEnabled = false;
+    }
+
     try {
         const layersData = layerManager.exportAllLayers();
         const groupsData = Array.from(layerManager.layerGroups.values());
@@ -3631,10 +3719,24 @@ async function handleSaveToFirebase() {
 
         loadingManager.hide();
         toastManager.success(`Data saved to Firebase for workspace: ${currentProfile.name}`);
+
+        // Re-enable listener after a short delay to allow Firebase to settle
+        if (wasListening) {
+            setTimeout(() => {
+                enableRealtimeSync();
+            }, 1000);
+        }
     } catch (error) {
         console.error('Error saving to Firebase:', error);
         loadingManager.hide();
         toastManager.error('Error saving to Firebase: ' + error.message);
+
+        // Re-enable listener even on error
+        if (wasListening) {
+            setTimeout(() => {
+                enableRealtimeSync();
+            }, 1000);
+        }
     }
 }
 
