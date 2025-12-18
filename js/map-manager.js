@@ -1192,10 +1192,25 @@ class MapManager {
         if (!dataSource || !dataSource.dataLayer) return;
 
         const dataLayer = dataSource.dataLayer;
+        const layerInfo = this.layers.get(layerId);
+
         dataLayer.forEach((feature) => {
             if (feature.getId() === featureId) {
                 // Restore visibility
                 dataLayer.revertStyle(feature);
+
+                // Re-apply layer style to ensure it matches current layer styling
+                // This is important after polygon edits to preserve custom styles
+                if (layerInfo && dataLayer.getStyle()) {
+                    const currentStyle = dataLayer.getStyle();
+                    if (typeof currentStyle === 'function') {
+                        // Re-apply the style function to this specific feature
+                        const featureStyle = currentStyle(feature);
+                        if (featureStyle) {
+                            dataLayer.overrideStyle(feature, featureStyle);
+                        }
+                    }
+                }
             }
         });
     }

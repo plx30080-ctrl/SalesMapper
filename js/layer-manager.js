@@ -680,10 +680,9 @@ class LayerManager {
                     layer.color = color;
                 }
 
-                // Set visibility on map
-                if (!layer.visible) {
-                    this.mapManager.toggleLayerVisibility(layerId, false);
-                }
+                // IMPORTANT: Always set visibility explicitly to match saved state
+                // This ensures layers don't become visible after Firebase save/load
+                this.mapManager.toggleLayerVisibility(layerId, layer.visible);
 
                 // Set opacity on map
                 if (layer.opacity !== undefined && layer.opacity !== 1.0) {

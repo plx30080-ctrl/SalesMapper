@@ -3175,3 +3175,101 @@ body {
     background: var(--error-color);
     color: white;
 }
+
+/* ===== Layer Search ===== */
+.layer-search-container {
+    position: relative;
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.layer-search-input {
+    width: 100%;
+    padding: 0.6rem 2.5rem 0.6rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+}
+
+.layer-search-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    background: var(--bg-primary);
+    box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb, 64, 156, 255), 0.1);
+}
+
+.layer-search-input::placeholder {
+    color: var(--text-tertiary);
+}
+
+.clear-search-btn {
+    position: absolute;
+    right: 1.25rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--text-secondary);
+    border: none;
+    color: white;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1.2rem;
+    line-height: 1;
+    transition: all 0.2s ease;
+}
+
+.clear-search-btn:hover {
+    background: var(--error-color);
+    transform: translateY(-50%) scale(1.1);
+}
+
+/* ===== Enhanced Layer Group Styling ===== */
+.layer-group-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.layer-group-collapse-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    transition: transform 0.2s ease;
+}
+
+.layer-group-collapse-btn.collapsed {
+    transform: rotate(-90deg);
+}
+
+.layer-group-collapse-btn:hover {
+    color: var(--text-primary);
+}
+
+.layer-group-item.collapsed .layer-group-content {
+    display: none;
+}
+
+.layer-group-badge {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: auto;
+}

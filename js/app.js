@@ -467,6 +467,26 @@ function setupEventListeners() {
     // Layer Management
     document.getElementById('addLayerBtn').addEventListener('click', handleAddLayerClick);
 
+    // Layer Search
+    const layerSearchInput = document.getElementById('layerSearchInput');
+    const clearLayerSearch = document.getElementById('clearLayerSearch');
+
+    layerSearchInput.addEventListener('input', (e) => {
+        const value = e.target.value.trim();
+        if (value) {
+            clearLayerSearch.style.display = 'flex';
+        } else {
+            clearLayerSearch.style.display = 'none';
+        }
+        updateLayerList();
+    });
+
+    clearLayerSearch.addEventListener('click', () => {
+        layerSearchInput.value = '';
+        clearLayerSearch.style.display = 'none';
+        updateLayerList();
+    });
+
     // Filtering
     document.getElementById('applyFilterBtn').addEventListener('click', handleApplyFilter);
     document.getElementById('clearFilterBtn').addEventListener('click', handleClearFilter);
@@ -2146,8 +2166,25 @@ function updateLayerList(layers) {
         }
     }
 
+    // Apply search filter if there's a search term
+    const searchInput = document.getElementById('layerSearchInput');
+    if (searchInput && searchInput.value.trim()) {
+        const searchTerm = searchInput.value.trim().toLowerCase();
+        displayLayers = displayLayers.filter(layer => {
+            return layer.name.toLowerCase().includes(searchTerm) ||
+                   layer.id.toLowerCase().includes(searchTerm) ||
+                   (layer.metadata && layer.metadata.description &&
+                    layer.metadata.description.toLowerCase().includes(searchTerm));
+        });
+    }
+
     if (displayLayers.length === 0) {
-        layerList.innerHTML = '<p class="empty-state">No layers in this group. Upload a CSV to add one.</p>';
+        const searchTerm = searchInput && searchInput.value.trim();
+        if (searchTerm) {
+            layerList.innerHTML = `<p class="empty-state">No layers match "${searchTerm}"</p>`;
+        } else {
+            layerList.innerHTML = '<p class="empty-state">No layers in this group. Upload a CSV to add one.</p>';
+        }
         return;
     }
 
