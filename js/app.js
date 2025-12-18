@@ -47,11 +47,26 @@ function saveToLocalStorage() {
 }
 
 /**
+ * Simple hash function for state comparison
+ */
+function simpleHash(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    return hash.toString();
+}
+
+/**
  * Auto-save to Firebase (for real-time collaboration)
  * Debounced to prevent excessive saves during rapid changes
  */
 let autoSaveTimeout = null;
 let isSavingToFirebase = false;
+let isImporting = false; // Prevents auto-save during Firebase imports
+let lastSaveHash = null; // Hash of last saved state for echo detection
 
 async function autoSaveToFirebase() {
     // Clear any pending auto-save
@@ -63,7 +78,8 @@ async function autoSaveToFirebase() {
     autoSaveTimeout = setTimeout(async () => {
         const currentProfile = stateManager.getCurrentProfile();
 
-        if (!currentProfile || isSavingToFirebase) {
+        // Don't auto-save if we're currently importing or already saving
+        if (!currentProfile || isSavingToFirebase || isImporting) {
             return;
         }
 
@@ -87,10 +103,16 @@ async function autoSaveToFirebase() {
             const layersData = layerManager.exportAllLayers();
             const groupsData = Array.from(layerManager.layerGroups.values());
 
-            await firebaseManager.saveAllLayers({
+            const dataToSave = {
                 ...layersData,
                 _groups: groupsData
-            }, currentProfile.name);
+            };
+
+            // Calculate hash of data being saved (for echo detection)
+            lastSaveHash = simpleHash(JSON.stringify(dataToSave));
+            console.log('💾 Saving with hash:', lastSaveHash);
+
+            await firebaseManager.saveAllLayers(dataToSave, currentProfile.name);
 
             console.log('✅ Auto-save successful');
 
@@ -101,13 +123,13 @@ async function autoSaveToFirebase() {
                 }
             }, 500);
 
-            // EMERGENCY: Do NOT re-enable listener - it causes infinite loop
-            // Real-time sync is temporarily disabled
-            // if (wasListening) {
-            //     setTimeout(() => {
-            //         enableRealtimeSync();
-            //     }, 1000);
-            // }
+            // Re-enable listener after save completes
+            // Listener will ignore echoes of this save using hash comparison
+            if (wasListening) {
+                setTimeout(() => {
+                    enableRealtimeSync();
+                }, 2000); // 2 second delay for Firebase to propagate
+            }
         } catch (error) {
             console.error('❌ Auto-save error:', error);
 
@@ -3702,7 +3724,6 @@ async function handleSaveToFirebase() {
     loadingManager.show('Saving to Firebase...');
 
     // Temporarily disable real-time listener to prevent feedback loop
-    // where saving triggers the listener which re-imports and overwrites changes
     const wasListening = realtimeListenerEnabled;
     if (wasListening) {
         firebaseManager.stopListening();
@@ -3713,31 +3734,38 @@ async function handleSaveToFirebase() {
         const layersData = layerManager.exportAllLayers();
         const groupsData = Array.from(layerManager.layerGroups.values());
 
-        await firebaseManager.saveAllLayers({
+        const dataToSave = {
             ...layersData,
             _groups: groupsData
-        }, currentProfile.name);
+        };
+
+        // Calculate hash of data being saved (for echo detection)
+        lastSaveHash = simpleHash(JSON.stringify(dataToSave));
+        console.log('💾 Manual save with hash:', lastSaveHash);
+
+        await firebaseManager.saveAllLayers(dataToSave, currentProfile.name);
 
         loadingManager.hide();
         toastManager.success(`Data saved to Firebase for workspace: ${currentProfile.name}`);
 
-        // EMERGENCY: Do NOT re-enable listener - it causes infinite loop
-        // if (wasListening) {
-        //     setTimeout(() => {
-        //         enableRealtimeSync();
-        //     }, 1000);
-        // }
+        // Re-enable listener after save completes
+        // Listener will ignore echoes of this save using hash comparison
+        if (wasListening) {
+            setTimeout(() => {
+                enableRealtimeSync();
+            }, 2000); // 2 second delay for Firebase to propagate
+        }
     } catch (error) {
         console.error('Error saving to Firebase:', error);
         loadingManager.hide();
         toastManager.error('Error saving to Firebase: ' + error.message);
 
-        // EMERGENCY: Do NOT re-enable listener
-        // if (wasListening) {
-        //     setTimeout(() => {
-        //         enableRealtimeSync();
-        //     }, 1000);
-        // }
+        // Re-enable listener even on error (hash will prevent issues)
+        if (wasListening) {
+            setTimeout(() => {
+                enableRealtimeSync();
+            }, 2000);
+        }
     }
 }
 
@@ -3828,17 +3856,28 @@ async function handleLoadFromFirebase() {
  * Enable real-time Firebase sync
  */
 function enableRealtimeSync() {
-    // EMERGENCY DISABLE: Real-time sync disabled to prevent infinite loop
-    // Will be re-implemented with proper conflict detection
-    console.warn('Real-time sync temporarily disabled');
-    return;
-
     if (realtimeListenerEnabled) return;
 
     firebaseManager.listenForUpdates((updatedLayers) => {
-        console.log('Real-time update received from Firebase');
+        console.log('📥 Real-time update received from Firebase');
+
+        // Calculate hash of incoming data to detect echoes
+        const incomingHash = simpleHash(JSON.stringify(updatedLayers));
+        console.log('   Incoming hash:', incomingHash);
+        console.log('   Last save hash:', lastSaveHash);
+
+        // Ignore if this is an echo of our own save
+        if (incomingHash === lastSaveHash && lastSaveHash !== null) {
+            console.log('⏭️  Ignoring echo of own save');
+            return;
+        }
 
         if (Object.keys(updatedLayers).length > 0 && !document.getElementById('editModal').classList.contains('show')) {
+            console.log('🔄 Processing real-time update from another user/session');
+
+            // Set importing flag to prevent auto-save during import
+            isImporting = true;
+
             if (updatedLayers._groups) {
                 layerManager.layerGroups.clear();
                 updatedLayers._groups.forEach(g => {
@@ -3886,11 +3925,17 @@ function enableRealtimeSync() {
             });
 
             toastManager.show('Data synced from Firebase', 'info');
+
+            // Clear importing flag after a brief delay to ensure all operations complete
+            setTimeout(() => {
+                isImporting = false;
+                console.log('✅ Import complete, auto-save re-enabled');
+            }, 100);
         }
     });
 
     realtimeListenerEnabled = true;
-    console.log('Real-time Firebase sync enabled');
+    console.log('🔄 Real-time Firebase sync enabled with echo detection');
 }
 
 // ==================== PROFILE MANAGEMENT ====================
