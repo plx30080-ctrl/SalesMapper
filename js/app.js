@@ -3620,6 +3620,14 @@ async function handleSaveToFirebase() {
 
     loadingManager.show('Saving to Firebase...');
 
+    // Temporarily disable real-time listener to prevent feedback loop
+    // where saving triggers the listener which re-imports and overwrites changes
+    const wasListening = realtimeListenerEnabled;
+    if (wasListening) {
+        firebaseManager.stopListening();
+        realtimeListenerEnabled = false;
+    }
+
     try {
         const layersData = layerManager.exportAllLayers();
         const groupsData = Array.from(layerManager.layerGroups.values());
@@ -3631,10 +3639,24 @@ async function handleSaveToFirebase() {
 
         loadingManager.hide();
         toastManager.success(`Data saved to Firebase for workspace: ${currentProfile.name}`);
+
+        // Re-enable listener after a short delay to allow Firebase to settle
+        if (wasListening) {
+            setTimeout(() => {
+                enableRealtimeSync();
+            }, 1000);
+        }
     } catch (error) {
         console.error('Error saving to Firebase:', error);
         loadingManager.hide();
         toastManager.error('Error saving to Firebase: ' + error.message);
+
+        // Re-enable listener even on error
+        if (wasListening) {
+            setTimeout(() => {
+                enableRealtimeSync();
+            }, 1000);
+        }
     }
 }
 
