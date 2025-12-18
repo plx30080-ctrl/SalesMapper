@@ -101,12 +101,13 @@ async function autoSaveToFirebase() {
                 }
             }, 500);
 
-            // Re-enable listener after a short delay
-            if (wasListening) {
-                setTimeout(() => {
-                    enableRealtimeSync();
-                }, 1000);
-            }
+            // EMERGENCY: Do NOT re-enable listener - it causes infinite loop
+            // Real-time sync is temporarily disabled
+            // if (wasListening) {
+            //     setTimeout(() => {
+            //         enableRealtimeSync();
+            //     }, 1000);
+            // }
         } catch (error) {
             console.error('❌ Auto-save error:', error);
 
@@ -115,12 +116,12 @@ async function autoSaveToFirebase() {
                 syncStatus.style.display = 'none';
             }
 
-            // Re-enable listener even on error
-            if (wasListening) {
-                setTimeout(() => {
-                    enableRealtimeSync();
-                }, 1000);
-            }
+            // EMERGENCY: Do NOT re-enable listener - it causes infinite loop
+            // if (wasListening) {
+            //     setTimeout(() => {
+            //         enableRealtimeSync();
+            //     }, 1000);
+            // }
         } finally {
             isSavingToFirebase = false;
         }
@@ -3720,23 +3721,23 @@ async function handleSaveToFirebase() {
         loadingManager.hide();
         toastManager.success(`Data saved to Firebase for workspace: ${currentProfile.name}`);
 
-        // Re-enable listener after a short delay to allow Firebase to settle
-        if (wasListening) {
-            setTimeout(() => {
-                enableRealtimeSync();
-            }, 1000);
-        }
+        // EMERGENCY: Do NOT re-enable listener - it causes infinite loop
+        // if (wasListening) {
+        //     setTimeout(() => {
+        //         enableRealtimeSync();
+        //     }, 1000);
+        // }
     } catch (error) {
         console.error('Error saving to Firebase:', error);
         loadingManager.hide();
         toastManager.error('Error saving to Firebase: ' + error.message);
 
-        // Re-enable listener even on error
-        if (wasListening) {
-            setTimeout(() => {
-                enableRealtimeSync();
-            }, 1000);
-        }
+        // EMERGENCY: Do NOT re-enable listener
+        // if (wasListening) {
+        //     setTimeout(() => {
+        //         enableRealtimeSync();
+        //     }, 1000);
+        // }
     }
 }
 
@@ -3827,6 +3828,11 @@ async function handleLoadFromFirebase() {
  * Enable real-time Firebase sync
  */
 function enableRealtimeSync() {
+    // EMERGENCY DISABLE: Real-time sync disabled to prevent infinite loop
+    // Will be re-implemented with proper conflict detection
+    console.warn('Real-time sync temporarily disabled');
+    return;
+
     if (realtimeListenerEnabled) return;
 
     firebaseManager.listenForUpdates((updatedLayers) => {
