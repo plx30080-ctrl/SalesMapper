@@ -377,9 +377,12 @@ class MapManager {
      * @param {string} layerId - Layer ID
      * @returns {google.maps.Data}
      */
-    createDataSource(layerId, enableClustering = false) {
+    createDataSource(layerId, enableClustering = false, initiallyVisible = true) {
         const dataLayer = new google.maps.Data();
-        dataLayer.setMap(this.map);
+        // Only add to map if layer should be initially visible
+        if (initiallyVisible) {
+            dataLayer.setMap(this.map);
+        }
         this.dataSources.set(layerId, { dataLayer, enableClustering });
         return dataLayer;
     }
@@ -665,7 +668,7 @@ class MapManager {
         // Create data source if it doesn't exist
         if (!dataSource) {
             const enableClustering = hasMixedOrPoints;
-            const dataLayer = this.createDataSource(layerId, enableClustering);
+            const dataLayer = this.createDataSource(layerId, enableClustering, initiallyVisible);
             dataSource = this.dataSources.get(layerId);
         }
 
