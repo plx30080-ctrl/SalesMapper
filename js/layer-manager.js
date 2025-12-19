@@ -679,6 +679,12 @@ class LayerManager {
                 showLabels: layerData.showLabels || false
             };
 
+            // Debug logging for visibility
+            console.log(`🔍 Importing layer: ${layer.name} (${layerId})`);
+            console.log(`   - visible from Firebase: ${layerData.visible}`);
+            console.log(`   - visible after default: ${layer.visible}`);
+            console.log(`   - has property styling: ${!!(layer.styleType && layer.styleProperty)}`);
+
             // Store layer (don't add to layerOrder yet)
             this.layers.set(layerId, layer);
 
