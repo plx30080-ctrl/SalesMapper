@@ -391,9 +391,10 @@ class MapManager {
      * Add polygon layer to the map
      * @param {string} layerId - Layer ID
      * @param {string} color - Polygon color
+     * @param {boolean} initiallyVisible - Whether layer should be visible initially
      * @param {Object} options - Additional layer options
      */
-    addPolygonLayer(layerId, color, options = {}) {
+    addPolygonLayer(layerId, color, initiallyVisible = true, options = {}) {
         const dataSource = this.dataSources.get(layerId);
         if (!dataSource || !dataSource.dataLayer) {
             console.error(`Data source for layer ${layerId} not found`);
@@ -487,9 +488,10 @@ class MapManager {
      * Add point layer to the map with clustering
      * @param {string} layerId - Layer ID
      * @param {string} color - Point color
+     * @param {boolean} initiallyVisible - Whether layer should be visible initially
      * @param {Object} options - Additional layer options
      */
-    addPointLayer(layerId, color, options = {}) {
+    addPointLayer(layerId, color, initiallyVisible = true, options = {}) {
         const dataSource = this.dataSources.get(layerId);
         if (!dataSource) {
             console.error(`Data source for layer ${layerId} not found`);
@@ -528,9 +530,10 @@ class MapManager {
 
                 // Create marker with teardrop icon
                 // Don't set map yet if clustering - let clusterer handle it
+                // Also respect initiallyVisible parameter
                 const marker = new google.maps.Marker({
                     position: { lat: position.lat(), lng: position.lng() },
-                    map: dataSource.enableClustering ? null : this.map, // Only set map if NOT clustering
+                    map: (dataSource.enableClustering || !initiallyVisible) ? null : this.map,
                     title: feature.getProperty('name') || '',
                     icon: {
                         path: pinPath,
@@ -570,17 +573,19 @@ class MapManager {
             } else if (typeof markerClusterer !== 'undefined' && markerClusterer.MarkerClusterer) {
                 // Fallback to default MarkerClusterer
                 clusterer = new markerClusterer.MarkerClusterer({
-                    map: this.map,
+                    map: initiallyVisible ? this.map : null,
                     markers: markers
                 });
                 console.log(`Default MarkerClusterer initialized for ${layerId} with ${markers.length} markers`);
             } else {
                 console.warn(`Clustering requested for ${layerId} but no clustering library available`);
-                // Fallback: add markers to map manually
-                markers.forEach(m => m.setMap(this.map));
+                // Fallback: add markers to map manually (only if initially visible)
+                if (initiallyVisible) {
+                    markers.forEach(m => m.setMap(this.map));
+                }
             }
-        } else if (markers.length > 0) {
-            // No clustering - add markers directly to map
+        } else if (markers.length > 0 && initiallyVisible) {
+            // No clustering - add markers directly to map (only if initially visible)
             markers.forEach(m => m.setMap(this.map));
         }
 
@@ -721,20 +726,15 @@ class MapManager {
         });
 
         // Add appropriate layer types (for mixed, add both)
+        // Pass initiallyVisible to ensure layers are created in the correct state
         if (type === 'polygon') {
-            this.addPolygonLayer(layerId, color);
+            this.addPolygonLayer(layerId, color, initiallyVisible);
         } else if (type === 'point') {
-            this.addPointLayer(layerId, color);
+            this.addPointLayer(layerId, color, initiallyVisible);
         } else if (type === 'mixed') {
             // Add both polygon and point layers for mixed type
-            this.addPolygonLayer(layerId, color);
-            this.addPointLayer(layerId, color);
-        }
-
-        // Immediately hide the layer if it should not be initially visible
-        // This prevents the visual flash when importing hidden layers
-        if (!initiallyVisible) {
-            this.toggleLayerVisibility(layerId, false);
+            this.addPolygonLayer(layerId, color, initiallyVisible);
+            this.addPointLayer(layerId, color, initiallyVisible);
         }
 
         // Fit map to show all features (only if visible)

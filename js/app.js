@@ -3086,13 +3086,7 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
 
         // Enable clustering for point layers
         const enableClustering = layer.type === 'point';
-        const dataLayer = mapManager.createDataSource(layerId, enableClustering);
-
-        // CRITICAL: Immediately hide data layer if it should not be visible
-        // This must happen BEFORE adding features to prevent visual flash
-        if (!wasVisible) {
-            dataLayer.setMap(null);
-        }
+        const dataLayer = mapManager.createDataSource(layerId, enableClustering, wasVisible);
 
         // Add all features to data source
         const geoJsonFeatures = layer.features.map((feature, index) => {
