@@ -662,11 +662,6 @@ class LayerManager {
 
         // Import each layer
         for (let [layerId, layerData] of Object.entries(layersData)) {
-            // Debug: Log visibility from Firebase
-            console.log(`🔍 Importing layer: ${layerData.name}`);
-            console.log(`   - visible from Firebase: ${layerData.visible}`);
-            console.log(`   - visible after default: ${layerData.visible !== undefined ? layerData.visible : true}`);
-
             // Create layer object with preserved ID
             const layer = {
                 id: layerId,  // Preserve original ID

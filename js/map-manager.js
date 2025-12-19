@@ -567,8 +567,8 @@ class MapManager {
         let clusterer = null;
         if (dataSource.enableClustering && markers.length > 0) {
             if (this.clusterManager) {
-                // Use enhanced cluster manager
-                clusterer = this.clusterManager.initializeForLayer(layerId, markers, color);
+                // Use enhanced cluster manager with visibility parameter
+                clusterer = this.clusterManager.initializeForLayer(layerId, markers, color, initiallyVisible);
                 console.log(`Enhanced clustering initialized for ${layerId} with ${markers.length} markers`);
             } else if (typeof markerClusterer !== 'undefined' && markerClusterer.MarkerClusterer) {
                 // Fallback to default MarkerClusterer
