@@ -80,17 +80,15 @@ async function autoSaveToFirebase() {
 
         // Don't auto-save if we're currently importing or already saving
         if (!currentProfile || isSavingToFirebase || isImporting) {
+            console.log('⏭️  Skipping auto-save (isImporting:', isImporting, 'isSaving:', isSavingToFirebase, ')');
             return;
         }
 
         console.log('🔄 Auto-saving to Firebase...');
         isSavingToFirebase = true;
 
-        // Show sync indicator
-        const syncStatus = document.getElementById('syncStatus');
-        if (syncStatus) {
-            syncStatus.style.display = 'flex';
-        }
+        // Set timestamp to ignore our own echo
+        lastSaveHash = Date.now().toString();
 
         // Temporarily disable listener to prevent feedback loop
         const wasListening = realtimeListenerEnabled;
@@ -99,51 +97,28 @@ async function autoSaveToFirebase() {
             realtimeListenerEnabled = false;
         }
 
-        try {
+        try{
             const layersData = layerManager.exportAllLayers();
             const groupsData = Array.from(layerManager.layerGroups.values());
 
             const dataToSave = {
                 ...layersData,
-                _groups: groupsData
+                _groups: groupsData,
+                _timestamp: lastSaveHash // Include timestamp for echo detection
             };
-
-            // Calculate hash of data being saved (for echo detection)
-            lastSaveHash = simpleHash(JSON.stringify(dataToSave));
-            console.log('💾 Saving with hash:', lastSaveHash);
 
             await firebaseManager.saveAllLayers(dataToSave, currentProfile.name);
 
-            console.log('✅ Auto-save successful');
-
-            // Hide sync indicator after a brief delay
-            setTimeout(() => {
-                if (syncStatus) {
-                    syncStatus.style.display = 'none';
-                }
-            }, 500);
+            console.log('✅ Auto-save successful at', lastSaveHash);
 
             // Re-enable listener after save completes
-            // Listener will ignore echoes of this save using hash comparison
             if (wasListening) {
                 setTimeout(() => {
                     enableRealtimeSync();
-                }, 2000); // 2 second delay for Firebase to propagate
+                }, 3000); // 3 second delay for Firebase to propagate
             }
         } catch (error) {
             console.error('❌ Auto-save error:', error);
-
-            // Hide sync indicator on error
-            if (syncStatus) {
-                syncStatus.style.display = 'none';
-            }
-
-            // EMERGENCY: Do NOT re-enable listener - it causes infinite loop
-            // if (wasListening) {
-            //     setTimeout(() => {
-            //         enableRealtimeSync();
-            //     }, 1000);
-            // }
         } finally {
             isSavingToFirebase = false;
         }
@@ -3887,13 +3862,13 @@ function enableRealtimeSync() {
     firebaseManager.listenForUpdates((updatedLayers) => {
         console.log('📥 Real-time update received from Firebase');
 
-        // Calculate hash of incoming data to detect echoes
-        const incomingHash = simpleHash(JSON.stringify(updatedLayers));
-        console.log('   Incoming hash:', incomingHash);
-        console.log('   Last save hash:', lastSaveHash);
+        // Check timestamp to detect echoes
+        const incomingTimestamp = updatedLayers._timestamp;
+        console.log('   Incoming timestamp:', incomingTimestamp);
+        console.log('   Last save timestamp:', lastSaveHash);
 
         // Ignore if this is an echo of our own save
-        if (incomingHash === lastSaveHash && lastSaveHash !== null) {
+        if (incomingTimestamp === lastSaveHash && lastSaveHash !== null) {
             console.log('⏭️  Ignoring echo of own save');
             return;
         }
@@ -3952,11 +3927,11 @@ function enableRealtimeSync() {
 
             toastManager.show('Data synced from Firebase', 'info');
 
-            // Clear importing flag after a brief delay to ensure all operations complete
+            // Clear importing flag after ALL operations complete (including property styling)
             setTimeout(() => {
                 isImporting = false;
                 console.log('✅ Import complete, auto-save re-enabled');
-            }, 100);
+            }, 1000); // 1 second to ensure all styling operations complete
         }
     });
 
