@@ -3205,13 +3205,17 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
             }
             mapManager.markers.get(layerId).push(...markers);
 
-            // Setup clustering if enabled and MarkerClusterer is available
+            // Setup clustering if enabled
             let clusterer = null;
             if (enableClustering && markers.length > 0) {
-                // Check if MarkerClusterer is available in global scope
-                if (typeof markerClusterer !== 'undefined' && markerClusterer.MarkerClusterer) {
+                // Use enhanced cluster manager if available
+                if (mapManager.clusterManager) {
+                    clusterer = mapManager.clusterManager.initializeForLayer(layerId, markers, 'data-driven', wasVisible);
+                    console.log(`Enhanced clustering initialized for ${layerId} with ${markers.length} markers`);
+                } else if (typeof markerClusterer !== 'undefined' && markerClusterer.MarkerClusterer) {
+                    // Fallback to basic MarkerClusterer
                     clusterer = new markerClusterer.MarkerClusterer({
-                        map: wasVisible ? mapManager.map : null, // Only show if layer should be visible
+                        map: wasVisible ? mapManager.map : null,
                         markers: markers
                     });
                     console.log(`MarkerClusterer initialized for ${layerId} with ${markers.length} markers`);

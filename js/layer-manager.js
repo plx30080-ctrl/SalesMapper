@@ -662,6 +662,11 @@ class LayerManager {
 
         // Import each layer
         for (let [layerId, layerData] of Object.entries(layersData)) {
+            // Skip special properties (timestamps, groups, etc.)
+            if (layerId.startsWith('_')) {
+                continue;
+            }
+
             // Create layer object with preserved ID
             const layer = {
                 id: layerId,  // Preserve original ID
@@ -708,8 +713,8 @@ class LayerManager {
             }
         }
 
-        // Restore layer order
-        this.layerOrder = layerOrder.filter(id => this.layers.has(id));
+        // Restore layer order (exclude special properties)
+        this.layerOrder = layerOrder.filter(id => !id.startsWith('_') && this.layers.has(id));
 
         // Sync the layer z-order on the map to match the restored order
         this.syncLayerZOrder();
