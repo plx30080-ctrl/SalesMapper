@@ -3087,6 +3087,12 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
         const enableClustering = layer.type === 'point';
         const dataLayer = mapManager.createDataSource(layerId, enableClustering);
 
+        // CRITICAL: Immediately hide data layer if it should not be visible
+        // This must happen BEFORE adding features to prevent visual flash
+        if (!wasVisible) {
+            dataLayer.setMap(null);
+        }
+
         // Add all features to data source
         const geoJsonFeatures = layer.features.map((feature, index) => {
             let geometry;
@@ -3168,10 +3174,10 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
                     const color = colorMap[propValue] || '#cccccc';
 
                     // Create marker with teardrop icon
-                    // Don't set map yet if clustering - let clusterer handle it
+                    // Don't set map if clustering, or if layer should be hidden
                     const marker = new google.maps.Marker({
                         position: { lat: position.lat(), lng: position.lng() },
-                        map: enableClustering ? null : mapManager.map, // Only set map if NOT clustering
+                        map: (enableClustering || !wasVisible) ? null : mapManager.map,
                         title: feature.getProperty('name') || '',
                         icon: {
                             path: pinPath,
@@ -3210,14 +3216,16 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
                 // Check if MarkerClusterer is available in global scope
                 if (typeof markerClusterer !== 'undefined' && markerClusterer.MarkerClusterer) {
                     clusterer = new markerClusterer.MarkerClusterer({
-                        map: mapManager.map,
+                        map: wasVisible ? mapManager.map : null, // Only show if layer should be visible
                         markers: markers
                     });
                     console.log(`MarkerClusterer initialized for ${layerId} with ${markers.length} markers`);
                 } else {
                     console.warn(`Clustering requested for ${layerId} but MarkerClusterer library not loaded yet`);
-                    // Fallback: add markers to map manually
-                    markers.forEach(m => m.setMap(mapManager.map));
+                    // Fallback: add markers to map manually only if layer should be visible
+                    if (wasVisible) {
+                        markers.forEach(m => m.setMap(mapManager.map));
+                    }
                 }
             }
 
