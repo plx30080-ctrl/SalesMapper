@@ -3927,11 +3927,14 @@ function enableRealtimeSync() {
 
             toastManager.show('Data synced from Firebase', 'info');
 
-            // Clear importing flag after ALL operations complete (including property styling)
-            setTimeout(() => {
-                isImporting = false;
-                console.log('✅ Import complete, auto-save re-enabled');
-            }, 1000); // 1 second to ensure all styling operations complete
+            // Clear importing flag after rendering completes
+            // Use requestAnimationFrame to ensure map rendering has finished
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    isImporting = false;
+                    console.log('✅ Import complete, auto-save re-enabled');
+                });
+            });
         }
     });
 
@@ -4151,6 +4154,9 @@ async function switchProfile(profileId, showLoading = true) {
         updateProfileSelector();
         updateLayerGroupList();
         updateLayerList(layerManager.getAllLayers());
+
+        // Re-enable real-time sync for the new profile
+        enableRealtimeSync();
 
         if (showLoading) {
             loadingManager.hide();

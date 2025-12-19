@@ -196,9 +196,17 @@ class FirebaseManager {
 
         const profileRef = this.getCurrentProfileRef();
         profileRef.on('value', (snapshot) => {
-            const data = snapshot.val();
-            if (data && data.layers) {
-                callback(data.layers);
+            try {
+                const data = snapshot.val();
+                if (data && data.layers) {
+                    callback(data.layers);
+                }
+            } catch (error) {
+                console.error('Error in real-time listener callback:', error);
+                // Emit error event for app-level handling
+                if (window.eventBus) {
+                    eventBus.emit('firebase.listener.error', { error });
+                }
             }
         });
     }
