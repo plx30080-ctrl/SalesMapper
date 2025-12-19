@@ -659,9 +659,12 @@ class MapManager {
     addFeaturesToLayer(layerId, features, type, preferredColor = null, initiallyVisible = true) {
         let dataSource = this.dataSources.get(layerId);
 
+        // For mixed layers, determine if we need clustering based on whether any points exist
+        const hasMixedOrPoints = (type === 'point' || type === 'mixed');
+
         // Create data source if it doesn't exist
         if (!dataSource) {
-            const enableClustering = (type === 'point');
+            const enableClustering = hasMixedOrPoints;
             const dataLayer = this.createDataSource(layerId, enableClustering);
             dataSource = this.dataSources.get(layerId);
         }
@@ -672,13 +675,24 @@ class MapManager {
         const color = preferredColor || existingLayer?.color || this.getNextColor();
 
         // Convert features to GeoJSON and add to data layer
+        // For mixed types, detect feature type from the feature itself
         const geoJsonFeatures = features.map((feature, index) => {
             let geometry;
+            let featureType = type;
 
-            if (type === 'polygon' && feature.wkt) {
+            // Detect feature type if layer is mixed
+            if (type === 'mixed') {
+                if (feature.wkt) {
+                    featureType = 'polygon';
+                } else if (feature.latitude !== undefined && feature.longitude !== undefined) {
+                    featureType = 'point';
+                }
+            }
+
+            if (featureType === 'polygon' && feature.wkt) {
                 // Parse WKT to GeoJSON
                 geometry = this.parseWKT(feature.wkt);
-            } else if (type === 'point' && feature.latitude && feature.longitude) {
+            } else if (featureType === 'point' && feature.latitude && feature.longitude) {
                 // Create point geometry
                 geometry = {
                     type: 'Point',
@@ -703,10 +717,14 @@ class MapManager {
             dataLayer.addGeoJson(geoJsonFeature);
         });
 
-        // Add appropriate layer type
+        // Add appropriate layer types (for mixed, add both)
         if (type === 'polygon') {
             this.addPolygonLayer(layerId, color);
-        } else {
+        } else if (type === 'point') {
+            this.addPointLayer(layerId, color);
+        } else if (type === 'mixed') {
+            // Add both polygon and point layers for mixed type
+            this.addPolygonLayer(layerId, color);
             this.addPointLayer(layerId, color);
         }
 

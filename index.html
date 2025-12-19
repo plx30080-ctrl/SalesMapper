@@ -31,9 +31,14 @@
                         <span id="notificationBadge" class="notification-badge" style="display: none;">0</span>
                     </button>
                 </div>
-                <!-- Manual save/load buttons (auto-save still active but listener disabled) -->
-                <button id="saveToFirebase" class="btn btn-primary">Save to Firebase</button>
-                <button id="loadFromFirebase" class="btn btn-secondary">Load from Firebase</button>
+                <!-- Sync status indicator (auto-save active with real-time collaboration) -->
+                <div id="syncStatus" class="sync-status" style="display: none;">
+                    <span class="sync-icon">🔄</span>
+                    <span class="sync-text">Syncing...</span>
+                </div>
+                <!-- Manual save/load buttons (hidden - auto-save handles everything) -->
+                <button id="saveToFirebase" class="btn btn-primary" style="display: none;">Save to Firebase</button>
+                <button id="loadFromFirebase" class="btn btn-secondary" style="display: none;">Load from Firebase</button>
             </div>
         </header>
 
@@ -103,6 +108,11 @@
                         <div class="layer-search-container">
                             <input type="text" id="layerSearchInput" class="layer-search-input" placeholder="🔍 Search layers..." />
                             <button id="clearLayerSearch" class="clear-search-btn" style="display: none;" title="Clear search">×</button>
+                        </div>
+                        <div class="bulk-operations-container" style="padding: 0.5rem; border-bottom: 1px solid var(--border-color);">
+                            <button id="massUpdateNamesBtn" class="btn btn-secondary btn-sm" title="Update all feature names to match account names where applicable" style="width: 100%; font-size: 0.85rem; padding: 0.4rem;">
+                                🔄 Update Names to Account Names
+                            </button>
                         </div>
                         <div id="layerList" class="layer-list">
                             <!-- Layers will be dynamically added here -->

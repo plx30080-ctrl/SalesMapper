@@ -47,11 +47,26 @@ function saveToLocalStorage() {
 }
 
 /**
+ * Simple hash function for state comparison
+ */
+function simpleHash(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    return hash.toString();
+}
+
+/**
  * Auto-save to Firebase (for real-time collaboration)
  * Debounced to prevent excessive saves during rapid changes
  */
 let autoSaveTimeout = null;
 let isSavingToFirebase = false;
+let isImporting = false; // Prevents auto-save during Firebase imports
+let lastSaveHash = null; // Hash of last saved state for echo detection
 
 async function autoSaveToFirebase() {
     // Clear any pending auto-save
@@ -63,7 +78,8 @@ async function autoSaveToFirebase() {
     autoSaveTimeout = setTimeout(async () => {
         const currentProfile = stateManager.getCurrentProfile();
 
-        if (!currentProfile || isSavingToFirebase) {
+        // Don't auto-save if we're currently importing or already saving
+        if (!currentProfile || isSavingToFirebase || isImporting) {
             return;
         }
 
@@ -87,10 +103,16 @@ async function autoSaveToFirebase() {
             const layersData = layerManager.exportAllLayers();
             const groupsData = Array.from(layerManager.layerGroups.values());
 
-            await firebaseManager.saveAllLayers({
+            const dataToSave = {
                 ...layersData,
                 _groups: groupsData
-            }, currentProfile.name);
+            };
+
+            // Calculate hash of data being saved (for echo detection)
+            lastSaveHash = simpleHash(JSON.stringify(dataToSave));
+            console.log('💾 Saving with hash:', lastSaveHash);
+
+            await firebaseManager.saveAllLayers(dataToSave, currentProfile.name);
 
             console.log('✅ Auto-save successful');
 
@@ -101,13 +123,13 @@ async function autoSaveToFirebase() {
                 }
             }, 500);
 
-            // EMERGENCY: Do NOT re-enable listener - it causes infinite loop
-            // Real-time sync is temporarily disabled
-            // if (wasListening) {
-            //     setTimeout(() => {
-            //         enableRealtimeSync();
-            //     }, 1000);
-            // }
+            // Re-enable listener after save completes
+            // Listener will ignore echoes of this save using hash comparison
+            if (wasListening) {
+                setTimeout(() => {
+                    enableRealtimeSync();
+                }, 2000); // 2 second delay for Firebase to propagate
+            }
         } catch (error) {
             console.error('❌ Auto-save error:', error);
 
@@ -548,6 +570,13 @@ function setupEventListeners() {
     // Layer Management
     document.getElementById('addLayerBtn').addEventListener('click', handleAddLayerClick);
 
+    // Bulk Operations
+    document.getElementById('massUpdateNamesBtn').addEventListener('click', () => {
+        if (confirm('This will update all feature names to match their account names (where available). Continue?')) {
+            massUpdateNamesToAccountNames();
+        }
+    });
+
     // Layer Search
     const layerSearchInput = document.getElementById('layerSearchInput');
     const clearLayerSearch = document.getElementById('clearLayerSearch');
@@ -766,11 +795,19 @@ function handleCreateBlankLayer() {
     const isPoint = confirm('Layer type:\n\nOK = Point layer (markers)\nCancel = Polygon layer (shapes)');
     const layerType = isPoint ? 'point' : 'polygon';
 
-    // Create empty layer
-    const layerId = layerManager.createLayer(layerName.trim(), [], layerType, {
-        source: 'manual',
-        createdAt: new Date().toISOString()
-    });
+    // Create empty layer using command pattern for undo/redo
+    const command = new CreateLayerCommand(
+        layerManager,
+        layerName.trim(),
+        [],
+        layerType,
+        {
+            source: 'manual',
+            createdAt: new Date().toISOString()
+        }
+    );
+    commandHistory.execute(command);
+    const layerId = command.layerId;
 
     // Add to "All Layers" group
     addLayerToGroup(layerId, stateManager.get('allLayersGroupId'));
@@ -799,11 +836,12 @@ function handleAddGroup() {
  * Create a layer group
  */
 function createLayerGroup(name) {
-    // Use layerManager's method to create group properly
-    const groupId = layerManager.createLayerGroup(name);
+    // Use command pattern for undo/redo
+    const command = new CreateGroupCommand(layerManager, name);
+    commandHistory.execute(command);
 
     // EventBus will trigger updateLayerGroupList via subscription
-    return groupId;
+    return command.groupId;
 }
 
 /**
@@ -1123,7 +1161,9 @@ function handleRenameGroup(groupId, currentName) {
         return;
     }
 
-    layerManager.renameLayerGroup(groupId, newName.trim());
+    // Use command pattern for undo/redo
+    const command = new RenameGroupCommand(layerManager, groupId, newName.trim());
+    commandHistory.execute(command);
     toastManager.success(`Renamed group to "${newName}"`);
     updateLayerGroupList();
     saveToFirebase();
@@ -1150,7 +1190,9 @@ function handleDeleteGroup(groupId, groupName) {
         stateManager.set('activeGroup', null);
     }
 
-    layerManager.deleteLayerGroup(groupId);
+    // Use command pattern for undo/redo
+    const command = new DeleteGroupCommand(layerManager, groupId);
+    commandHistory.execute(command);
     toastManager.success(`Deleted group "${groupName}"`);
     updateLayerGroupList();
     updateLayerList(layerManager.getAllLayers());
@@ -1168,7 +1210,7 @@ function handleUndo() {
         toastManager.success(`Undone: ${description}`);
         updateLayerGroupList();
         updateLayerList(layerManager.getAllLayers());
-        saveToFirebase();
+        saveToLocalStorage(); // Trigger auto-save
     }
 }
 
@@ -1183,7 +1225,7 @@ function handleRedo() {
         toastManager.success(`Redone: ${description}`);
         updateLayerGroupList();
         updateLayerList(layerManager.getAllLayers());
-        saveToFirebase();
+        saveToLocalStorage(); // Trigger auto-save
     }
 }
 
@@ -1393,12 +1435,14 @@ function handleDrawingComplete(drawingData) {
         return;
     }
 
-    // Build feature properties based on layer type
+    // Build feature properties based on drawing type (layers can contain mixed types)
     const featureId = `drawn_${Date.now()}`;
     let feature;
+    let featureType;
 
-    if (layer.type === 'point' && drawingData.type === 'Point') {
+    if (drawingData.type === 'Point') {
         // Point feature
+        featureType = 'point';
         feature = {
             id: featureId,
             name: name,
@@ -1407,8 +1451,9 @@ function handleDrawingComplete(drawingData) {
             source: 'manual',
             createdAt: new Date().toISOString()
         };
-    } else if (layer.type === 'polygon' && drawingData.type === 'Polygon') {
+    } else if (drawingData.type === 'Polygon') {
         // Polygon feature
+        featureType = 'polygon';
         const coords = drawingData.coordinates[0].map(c => `${c[0]} ${c[1]}`).join(', ');
         const wkt = `POLYGON((${coords}))`;
         feature = {
@@ -1419,8 +1464,7 @@ function handleDrawingComplete(drawingData) {
             createdAt: new Date().toISOString()
         };
     } else {
-        // Type mismatch
-        toastManager.error(`Cannot add ${drawingData.type} to ${layer.type} layer`);
+        toastManager.error(`Unsupported drawing type: ${drawingData.type}`);
         if (drawingData.shape) {
             drawingData.shape.setMap(null);
         }
@@ -1433,7 +1477,8 @@ function handleDrawingComplete(drawingData) {
     }
 
     // Add feature to layer using the layer manager's method
-    layerManager.addFeaturesToLayer(targetLayerId, [feature]);
+    // Pass the feature type so layer-manager can handle mixed types
+    layerManager.addFeaturesToLayer(targetLayerId, [feature], featureType);
 
     toastManager.success(`Feature "${name}" added to "${layer.name}"`);
 }
@@ -2705,7 +2750,9 @@ function handleLayerAction(e) {
 
         case 'delete':
             if (confirm(`Delete layer "${layer.name}"?`)) {
-                layerManager.deleteLayer(layerId);
+                // Use command pattern for undo/redo
+                const command = new DeleteLayerCommand(layerManager, layerId);
+                commandHistory.execute(command);
                 removeLayerFromAllGroups(layerId);
                 toastManager.success(`Layer "${layer.name}" deleted`);
             }
@@ -2740,10 +2787,11 @@ function handleRenameLayer() {
     const layer = layerManager.getLayer(layerId);
     if (!layer) return;
 
-    if (layerManager.renameLayer(layerId, newName)) {
-        toastManager.success(`Layer renamed to "${newName}"`);
-        renderLayerPanel();
-    }
+    // Use command pattern for undo/redo
+    const command = new RenameLayerCommand(layerManager, layerId, newName);
+    commandHistory.execute(command);
+    toastManager.success(`Layer renamed to "${newName}"`);
+    renderLayerPanel();
 
     modalManager.close('renameLayerModal');
 }
@@ -3702,7 +3750,6 @@ async function handleSaveToFirebase() {
     loadingManager.show('Saving to Firebase...');
 
     // Temporarily disable real-time listener to prevent feedback loop
-    // where saving triggers the listener which re-imports and overwrites changes
     const wasListening = realtimeListenerEnabled;
     if (wasListening) {
         firebaseManager.stopListening();
@@ -3713,31 +3760,38 @@ async function handleSaveToFirebase() {
         const layersData = layerManager.exportAllLayers();
         const groupsData = Array.from(layerManager.layerGroups.values());
 
-        await firebaseManager.saveAllLayers({
+        const dataToSave = {
             ...layersData,
             _groups: groupsData
-        }, currentProfile.name);
+        };
+
+        // Calculate hash of data being saved (for echo detection)
+        lastSaveHash = simpleHash(JSON.stringify(dataToSave));
+        console.log('💾 Manual save with hash:', lastSaveHash);
+
+        await firebaseManager.saveAllLayers(dataToSave, currentProfile.name);
 
         loadingManager.hide();
         toastManager.success(`Data saved to Firebase for workspace: ${currentProfile.name}`);
 
-        // EMERGENCY: Do NOT re-enable listener - it causes infinite loop
-        // if (wasListening) {
-        //     setTimeout(() => {
-        //         enableRealtimeSync();
-        //     }, 1000);
-        // }
+        // Re-enable listener after save completes
+        // Listener will ignore echoes of this save using hash comparison
+        if (wasListening) {
+            setTimeout(() => {
+                enableRealtimeSync();
+            }, 2000); // 2 second delay for Firebase to propagate
+        }
     } catch (error) {
         console.error('Error saving to Firebase:', error);
         loadingManager.hide();
         toastManager.error('Error saving to Firebase: ' + error.message);
 
-        // EMERGENCY: Do NOT re-enable listener
-        // if (wasListening) {
-        //     setTimeout(() => {
-        //         enableRealtimeSync();
-        //     }, 1000);
-        // }
+        // Re-enable listener even on error (hash will prevent issues)
+        if (wasListening) {
+            setTimeout(() => {
+                enableRealtimeSync();
+            }, 2000);
+        }
     }
 }
 
@@ -3828,17 +3882,28 @@ async function handleLoadFromFirebase() {
  * Enable real-time Firebase sync
  */
 function enableRealtimeSync() {
-    // EMERGENCY DISABLE: Real-time sync disabled to prevent infinite loop
-    // Will be re-implemented with proper conflict detection
-    console.warn('Real-time sync temporarily disabled');
-    return;
-
     if (realtimeListenerEnabled) return;
 
     firebaseManager.listenForUpdates((updatedLayers) => {
-        console.log('Real-time update received from Firebase');
+        console.log('📥 Real-time update received from Firebase');
+
+        // Calculate hash of incoming data to detect echoes
+        const incomingHash = simpleHash(JSON.stringify(updatedLayers));
+        console.log('   Incoming hash:', incomingHash);
+        console.log('   Last save hash:', lastSaveHash);
+
+        // Ignore if this is an echo of our own save
+        if (incomingHash === lastSaveHash && lastSaveHash !== null) {
+            console.log('⏭️  Ignoring echo of own save');
+            return;
+        }
 
         if (Object.keys(updatedLayers).length > 0 && !document.getElementById('editModal').classList.contains('show')) {
+            console.log('🔄 Processing real-time update from another user/session');
+
+            // Set importing flag to prevent auto-save during import
+            isImporting = true;
+
             if (updatedLayers._groups) {
                 layerManager.layerGroups.clear();
                 updatedLayers._groups.forEach(g => {
@@ -3886,11 +3951,75 @@ function enableRealtimeSync() {
             });
 
             toastManager.show('Data synced from Firebase', 'info');
+
+            // Clear importing flag after a brief delay to ensure all operations complete
+            setTimeout(() => {
+                isImporting = false;
+                console.log('✅ Import complete, auto-save re-enabled');
+            }, 100);
         }
     });
 
     realtimeListenerEnabled = true;
-    console.log('Real-time Firebase sync enabled');
+    console.log('🔄 Real-time Firebase sync enabled with echo detection');
+}
+
+// ==================== BULK OPERATIONS ====================
+
+/**
+ * Mass update all feature names to use account names where applicable
+ */
+function massUpdateNamesToAccountNames() {
+    let updatedCount = 0;
+    const layers = layerManager.getAllLayers();
+
+    layers.forEach(layer => {
+        let layerUpdated = false;
+
+        layer.features.forEach(feature => {
+            // Check if feature has account_name property and it differs from name
+            if (feature.account_name && feature.account_name !== feature.name) {
+                feature.name = feature.account_name;
+                updatedCount++;
+                layerUpdated = true;
+            }
+        });
+
+        // If layer was updated, refresh it on the map
+        if (layerUpdated) {
+            // Remove and re-add layer to map to reflect name changes
+            mapManager.removeLayer(layer.id);
+            const color = mapManager.addFeaturesToLayer(
+                layer.id,
+                layer.features,
+                layer.type,
+                layer.color,
+                layer.visible
+            );
+            layer.color = color;
+
+            // Reapply any special styling
+            if (layer.styleType && layer.styleProperty) {
+                applyPropertyBasedStyle(layer.id, layer.styleProperty, layer.styleType);
+            }
+
+            // Reapply labels if enabled
+            if (layer.type === 'polygon' && layer.showLabels) {
+                mapManager.togglePolygonLabels(layer.id, true, layer.features);
+            }
+        }
+    });
+
+    // Save changes
+    saveToLocalStorage();
+
+    if (updatedCount > 0) {
+        toastManager.success(`Updated ${updatedCount} feature name(s) to account names`);
+    } else {
+        toastManager.show('No features found with account names to update', 'info');
+    }
+
+    return updatedCount;
 }
 
 // ==================== PROFILE MANAGEMENT ====================
