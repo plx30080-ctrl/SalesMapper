@@ -436,7 +436,7 @@ class MapManager {
      */
     updateLayerClickability(enabled) {
         this.layers.forEach(layer => {
-            if (layer.type === 'polygon' && layer.dataLayer) {
+            if ((layer.type === 'polygon' || layer.type === 'mixed') && layer.dataLayer) {
                 // Get the current style (could be a function for data-driven styling)
                 const currentStyle = layer.dataLayer.getStyle();
 
@@ -790,8 +790,8 @@ class MapManager {
         const layer = this.layers.get(layerId);
         if (!layer) return;
 
-        // Toggle data layer visibility (polygons use this)
-        if (layer.dataLayer && layer.type === 'polygon') {
+        // Toggle data layer visibility (polygons and mixed layers use this)
+        if (layer.dataLayer && (layer.type === 'polygon' || layer.type === 'mixed')) {
             layer.dataLayer.setMap(visible ? this.map : null);
         }
 
@@ -945,7 +945,7 @@ class MapManager {
             if (!layer) return;
 
             // Bring polygon data layers to the front by detaching and reattaching
-            if (layer.dataLayer && layer.type === 'polygon') {
+            if (layer.dataLayer && (layer.type === 'polygon' || layer.type === 'mixed')) {
                 layer.dataLayer.setMap(null);
                 layer.dataLayer.setMap(this.map);
 
