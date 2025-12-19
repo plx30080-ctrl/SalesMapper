@@ -378,10 +378,14 @@ class MapManager {
      * @returns {google.maps.Data}
      */
     createDataSource(layerId, enableClustering = false, initiallyVisible = true) {
+        console.log(`📍 createDataSource: ${layerId}, initiallyVisible = ${initiallyVisible}`);
         const dataLayer = new google.maps.Data();
         // Only add to map if layer should be initially visible
         if (initiallyVisible) {
+            console.log(`   ✅ Adding dataLayer to map`);
             dataLayer.setMap(this.map);
+        } else {
+            console.log(`   ⏸️  NOT adding dataLayer to map (will be hidden)`);
         }
         this.dataSources.set(layerId, { dataLayer, enableClustering });
         return dataLayer;
