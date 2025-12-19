@@ -31,22 +31,31 @@ class ClusterManager {
 
     /**
      * Initialize clustering for a layer
+     * @param {string} layerId - Layer ID
+     * @param {Array} markers - Markers to cluster
+     * @param {string} color - Layer color
+     * @param {boolean} initiallyVisible - Whether layer should be visible initially
      */
-    initializeForLayer(layerId, markers, color) {
+    initializeForLayer(layerId, markers, color, initiallyVisible = true) {
         if (!markers || markers.length === 0) {
             return null;
         }
 
         // Check if clustering is disabled globally or for this specific layer
         if (!this.clusterSettings.enabled) {
-            // Just add markers to map without clustering
-            markers.forEach(marker => marker.setMap(this.map));
+            // Just add markers to map without clustering (only if initially visible)
+            if (initiallyVisible) {
+                markers.forEach(marker => marker.setMap(this.map));
+            }
             return null;
         }
 
         // Don't cluster if below minimum threshold
         if (markers.length < this.clusterSettings.minClusterSize) {
-            markers.forEach(marker => marker.setMap(this.map));
+            // Add markers to map without clustering (only if initially visible)
+            if (initiallyVisible) {
+                markers.forEach(marker => marker.setMap(this.map));
+            }
             return null;
         }
 
@@ -60,12 +69,15 @@ class ClusterManager {
         try {
             if (typeof markerClusterer === 'undefined' || !markerClusterer.MarkerClusterer) {
                 console.warn('MarkerClusterer library not loaded');
-                markers.forEach(marker => marker.setMap(this.map));
+                // Fallback: show markers without clustering (only if initially visible)
+                if (initiallyVisible) {
+                    markers.forEach(marker => marker.setMap(this.map));
+                }
                 return null;
             }
 
             const clusterer = new markerClusterer.MarkerClusterer({
-                map: this.map,
+                map: initiallyVisible ? this.map : null,
                 markers: markers,
                 renderer: renderer,
                 algorithm: this.createAlgorithm(),
@@ -86,8 +98,10 @@ class ClusterManager {
 
         } catch (error) {
             console.error('Error initializing clusterer:', error);
-            // Fallback: show markers without clustering
-            markers.forEach(marker => marker.setMap(this.map));
+            // Fallback: show markers without clustering (only if initially visible)
+            if (initiallyVisible) {
+                markers.forEach(marker => marker.setMap(this.map));
+            }
             return null;
         }
     }
