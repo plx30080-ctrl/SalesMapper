@@ -3014,6 +3014,8 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
         const wasVisible = layer.visible !== undefined ? layer.visible : true;
         const layerOpacity = layer.opacity !== undefined ? layer.opacity : 1.0;
 
+        console.log(`🎨 Property styling for ${layer.name}: wasVisible = ${wasVisible}`);
+
         // Find the actual property name (case-insensitive)
         let actualPropertyName = property;
         if (layer.features.length > 0) {
