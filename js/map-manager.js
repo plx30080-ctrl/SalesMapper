@@ -535,9 +535,11 @@ class MapManager {
                 // Create marker with teardrop icon
                 // Don't set map yet if clustering - let clusterer handle it
                 // Also respect initiallyVisible parameter
+                const markerMap = (dataSource.enableClustering || !initiallyVisible) ? null : this.map;
+                console.log(`   📌 Creating marker: clustering=${dataSource.enableClustering}, initiallyVisible=${initiallyVisible}, map=${markerMap ? 'this.map' : 'null'}`);
                 const marker = new google.maps.Marker({
                     position: { lat: position.lat(), lng: position.lng() },
-                    map: (dataSource.enableClustering || !initiallyVisible) ? null : this.map,
+                    map: markerMap,
                     title: feature.getProperty('name') || '',
                     icon: {
                         path: pinPath,
