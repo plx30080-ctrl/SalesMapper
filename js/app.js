@@ -67,6 +67,7 @@ let autoSaveTimeout = null;
 let isSavingToFirebase = false;
 let isImporting = false; // Prevents auto-save during Firebase imports
 let lastSaveHash = null; // Hash of last saved state for echo detection
+let lastProfileLoadTimestamp = null; // Timestamp of last profile load to ignore stale updates
 
 async function autoSaveToFirebase() {
     // Clear any pending auto-save
@@ -3801,6 +3802,10 @@ async function handleLoadFromFirebase() {
         const result = await firebaseManager.loadAllLayers();
 
         if (result.layers && Object.keys(result.layers).length > 0) {
+            // Store the timestamp of this data load to ignore stale real-time updates
+            lastProfileLoadTimestamp = result.layers._timestamp ? parseInt(result.layers._timestamp) : Date.now();
+            console.log('📌 Manual load timestamp set to:', lastProfileLoadTimestamp);
+
             // Load groups if available
             if (result.layers._groups) {
                 layerManager.layerGroups.clear();
@@ -3874,10 +3879,18 @@ function enableRealtimeSync() {
         const incomingTimestamp = updatedLayers._timestamp;
         console.log('   Incoming timestamp:', incomingTimestamp);
         console.log('   Last save timestamp:', lastSaveHash);
+        console.log('   Last profile load timestamp:', lastProfileLoadTimestamp);
 
         // Ignore if this is an echo of our own save
         if (incomingTimestamp === lastSaveHash && lastSaveHash !== null) {
             console.log('⏭️  Ignoring echo of own save');
+            return;
+        }
+
+        // Ignore stale updates that are older than our last profile load
+        // This prevents old Firebase updates from overwriting fresh data after profile switch
+        if (lastProfileLoadTimestamp && incomingTimestamp && parseInt(incomingTimestamp) < lastProfileLoadTimestamp) {
+            console.log('⏭️  Ignoring stale update (older than current profile data)');
             return;
         }
 
@@ -3934,6 +3947,12 @@ function enableRealtimeSync() {
             });
 
             toastManager.show('Data synced from Firebase', 'info');
+
+            // Update our load timestamp to this incoming data so we don't reprocess it
+            if (incomingTimestamp) {
+                lastProfileLoadTimestamp = parseInt(incomingTimestamp);
+                console.log('📌 Updated profile load timestamp to:', lastProfileLoadTimestamp);
+            }
 
             // Clear importing flag after rendering completes
             // Use requestAnimationFrame to ensure map rendering has finished
@@ -4127,6 +4146,11 @@ async function switchProfile(profileId, showLoading = true) {
         const result = await firebaseManager.loadAllLayers();
 
         if (result.layers && Object.keys(result.layers).length > 0) {
+            // Store the timestamp of this data load to ignore stale real-time updates
+            // Use the data's timestamp if available, otherwise use current time
+            lastProfileLoadTimestamp = result.layers._timestamp ? parseInt(result.layers._timestamp) : Date.now();
+            console.log('📌 Profile load timestamp set to:', lastProfileLoadTimestamp);
+
             // Load groups if available
             if (result.layers._groups) {
                 result.layers._groups.forEach(g => {
