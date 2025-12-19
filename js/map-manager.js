@@ -505,6 +505,9 @@ class MapManager {
             }
         }
 
+        // Clear old markers from storage to prevent memory leak
+        this.markers.delete(layerId);
+
         const markers = [];
         const dataLayer = dataSource.dataLayer;
 
@@ -552,10 +555,7 @@ class MapManager {
         });
 
         // Store markers for later reference
-        if (!this.markers.has(layerId)) {
-            this.markers.set(layerId, []);
-        }
-        this.markers.get(layerId).push(...markers);
+        this.markers.set(layerId, markers);
 
         // v3.0: Setup clustering with enhanced ClusterManager
         let clusterer = null;
