@@ -3948,6 +3948,12 @@ function enableRealtimeSync() {
 
             toastManager.show('Data synced from Firebase', 'info');
 
+            // Update our load timestamp to this incoming data so we don't reprocess it
+            if (incomingTimestamp) {
+                lastProfileLoadTimestamp = parseInt(incomingTimestamp);
+                console.log('📌 Updated profile load timestamp to:', lastProfileLoadTimestamp);
+            }
+
             // Clear importing flag after rendering completes
             // Use requestAnimationFrame to ensure map rendering has finished
             requestAnimationFrame(() => {
