@@ -3887,10 +3887,10 @@ function enableRealtimeSync() {
             return;
         }
 
-        // Ignore stale updates that are older than our last profile load
+        // Ignore stale updates that are older than or equal to our last profile load
         // This prevents old Firebase updates from overwriting fresh data after profile switch
-        if (lastProfileLoadTimestamp && incomingTimestamp && parseInt(incomingTimestamp) < lastProfileLoadTimestamp) {
-            console.log('⏭️  Ignoring stale update (older than current profile data)');
+        if (lastProfileLoadTimestamp && incomingTimestamp && parseInt(incomingTimestamp) <= lastProfileLoadTimestamp) {
+            console.log('⏭️  Ignoring stale/duplicate update (not newer than current profile data)');
             return;
         }
 
