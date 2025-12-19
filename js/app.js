@@ -570,6 +570,13 @@ function setupEventListeners() {
     // Layer Management
     document.getElementById('addLayerBtn').addEventListener('click', handleAddLayerClick);
 
+    // Bulk Operations
+    document.getElementById('massUpdateNamesBtn').addEventListener('click', () => {
+        if (confirm('This will update all feature names to match their account names (where available). Continue?')) {
+            massUpdateNamesToAccountNames();
+        }
+    });
+
     // Layer Search
     const layerSearchInput = document.getElementById('layerSearchInput');
     const clearLayerSearch = document.getElementById('clearLayerSearch');
@@ -788,11 +795,19 @@ function handleCreateBlankLayer() {
     const isPoint = confirm('Layer type:\n\nOK = Point layer (markers)\nCancel = Polygon layer (shapes)');
     const layerType = isPoint ? 'point' : 'polygon';
 
-    // Create empty layer
-    const layerId = layerManager.createLayer(layerName.trim(), [], layerType, {
-        source: 'manual',
-        createdAt: new Date().toISOString()
-    });
+    // Create empty layer using command pattern for undo/redo
+    const command = new CreateLayerCommand(
+        layerManager,
+        layerName.trim(),
+        [],
+        layerType,
+        {
+            source: 'manual',
+            createdAt: new Date().toISOString()
+        }
+    );
+    commandHistory.execute(command);
+    const layerId = command.layerId;
 
     // Add to "All Layers" group
     addLayerToGroup(layerId, stateManager.get('allLayersGroupId'));
@@ -821,11 +836,12 @@ function handleAddGroup() {
  * Create a layer group
  */
 function createLayerGroup(name) {
-    // Use layerManager's method to create group properly
-    const groupId = layerManager.createLayerGroup(name);
+    // Use command pattern for undo/redo
+    const command = new CreateGroupCommand(layerManager, name);
+    commandHistory.execute(command);
 
     // EventBus will trigger updateLayerGroupList via subscription
-    return groupId;
+    return command.groupId;
 }
 
 /**
@@ -1145,7 +1161,9 @@ function handleRenameGroup(groupId, currentName) {
         return;
     }
 
-    layerManager.renameLayerGroup(groupId, newName.trim());
+    // Use command pattern for undo/redo
+    const command = new RenameGroupCommand(layerManager, groupId, newName.trim());
+    commandHistory.execute(command);
     toastManager.success(`Renamed group to "${newName}"`);
     updateLayerGroupList();
     saveToFirebase();
@@ -1172,7 +1190,9 @@ function handleDeleteGroup(groupId, groupName) {
         stateManager.set('activeGroup', null);
     }
 
-    layerManager.deleteLayerGroup(groupId);
+    // Use command pattern for undo/redo
+    const command = new DeleteGroupCommand(layerManager, groupId);
+    commandHistory.execute(command);
     toastManager.success(`Deleted group "${groupName}"`);
     updateLayerGroupList();
     updateLayerList(layerManager.getAllLayers());
@@ -1190,7 +1210,7 @@ function handleUndo() {
         toastManager.success(`Undone: ${description}`);
         updateLayerGroupList();
         updateLayerList(layerManager.getAllLayers());
-        saveToFirebase();
+        saveToLocalStorage(); // Trigger auto-save
     }
 }
 
@@ -1205,7 +1225,7 @@ function handleRedo() {
         toastManager.success(`Redone: ${description}`);
         updateLayerGroupList();
         updateLayerList(layerManager.getAllLayers());
-        saveToFirebase();
+        saveToLocalStorage(); // Trigger auto-save
     }
 }
 
@@ -1415,12 +1435,14 @@ function handleDrawingComplete(drawingData) {
         return;
     }
 
-    // Build feature properties based on layer type
+    // Build feature properties based on drawing type (layers can contain mixed types)
     const featureId = `drawn_${Date.now()}`;
     let feature;
+    let featureType;
 
-    if (layer.type === 'point' && drawingData.type === 'Point') {
+    if (drawingData.type === 'Point') {
         // Point feature
+        featureType = 'point';
         feature = {
             id: featureId,
             name: name,
@@ -1429,8 +1451,9 @@ function handleDrawingComplete(drawingData) {
             source: 'manual',
             createdAt: new Date().toISOString()
         };
-    } else if (layer.type === 'polygon' && drawingData.type === 'Polygon') {
+    } else if (drawingData.type === 'Polygon') {
         // Polygon feature
+        featureType = 'polygon';
         const coords = drawingData.coordinates[0].map(c => `${c[0]} ${c[1]}`).join(', ');
         const wkt = `POLYGON((${coords}))`;
         feature = {
@@ -1441,8 +1464,7 @@ function handleDrawingComplete(drawingData) {
             createdAt: new Date().toISOString()
         };
     } else {
-        // Type mismatch
-        toastManager.error(`Cannot add ${drawingData.type} to ${layer.type} layer`);
+        toastManager.error(`Unsupported drawing type: ${drawingData.type}`);
         if (drawingData.shape) {
             drawingData.shape.setMap(null);
         }
@@ -1455,7 +1477,8 @@ function handleDrawingComplete(drawingData) {
     }
 
     // Add feature to layer using the layer manager's method
-    layerManager.addFeaturesToLayer(targetLayerId, [feature]);
+    // Pass the feature type so layer-manager can handle mixed types
+    layerManager.addFeaturesToLayer(targetLayerId, [feature], featureType);
 
     toastManager.success(`Feature "${name}" added to "${layer.name}"`);
 }
@@ -2727,7 +2750,9 @@ function handleLayerAction(e) {
 
         case 'delete':
             if (confirm(`Delete layer "${layer.name}"?`)) {
-                layerManager.deleteLayer(layerId);
+                // Use command pattern for undo/redo
+                const command = new DeleteLayerCommand(layerManager, layerId);
+                commandHistory.execute(command);
                 removeLayerFromAllGroups(layerId);
                 toastManager.success(`Layer "${layer.name}" deleted`);
             }
@@ -2762,10 +2787,11 @@ function handleRenameLayer() {
     const layer = layerManager.getLayer(layerId);
     if (!layer) return;
 
-    if (layerManager.renameLayer(layerId, newName)) {
-        toastManager.success(`Layer renamed to "${newName}"`);
-        renderLayerPanel();
-    }
+    // Use command pattern for undo/redo
+    const command = new RenameLayerCommand(layerManager, layerId, newName);
+    commandHistory.execute(command);
+    toastManager.success(`Layer renamed to "${newName}"`);
+    renderLayerPanel();
 
     modalManager.close('renameLayerModal');
 }
@@ -3936,6 +3962,64 @@ function enableRealtimeSync() {
 
     realtimeListenerEnabled = true;
     console.log('🔄 Real-time Firebase sync enabled with echo detection');
+}
+
+// ==================== BULK OPERATIONS ====================
+
+/**
+ * Mass update all feature names to use account names where applicable
+ */
+function massUpdateNamesToAccountNames() {
+    let updatedCount = 0;
+    const layers = layerManager.getAllLayers();
+
+    layers.forEach(layer => {
+        let layerUpdated = false;
+
+        layer.features.forEach(feature => {
+            // Check if feature has account_name property and it differs from name
+            if (feature.account_name && feature.account_name !== feature.name) {
+                feature.name = feature.account_name;
+                updatedCount++;
+                layerUpdated = true;
+            }
+        });
+
+        // If layer was updated, refresh it on the map
+        if (layerUpdated) {
+            // Remove and re-add layer to map to reflect name changes
+            mapManager.removeLayer(layer.id);
+            const color = mapManager.addFeaturesToLayer(
+                layer.id,
+                layer.features,
+                layer.type,
+                layer.color,
+                layer.visible
+            );
+            layer.color = color;
+
+            // Reapply any special styling
+            if (layer.styleType && layer.styleProperty) {
+                applyPropertyBasedStyle(layer.id, layer.styleProperty, layer.styleType);
+            }
+
+            // Reapply labels if enabled
+            if (layer.type === 'polygon' && layer.showLabels) {
+                mapManager.togglePolygonLabels(layer.id, true, layer.features);
+            }
+        }
+    });
+
+    // Save changes
+    saveToLocalStorage();
+
+    if (updatedCount > 0) {
+        toastManager.success(`Updated ${updatedCount} feature name(s) to account names`);
+    } else {
+        toastManager.show('No features found with account names to update', 'info');
+    }
+
+    return updatedCount;
 }
 
 // ==================== PROFILE MANAGEMENT ====================

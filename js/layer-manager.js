@@ -110,7 +110,7 @@ class LayerManager {
      * @param {string} layerId - Layer ID
      * @param {Array} features - Array of features to add
      */
-    addFeaturesToLayer(layerId, features) {
+    addFeaturesToLayer(layerId, features, featureType = null) {
         const layers = this.layers;
         const layer = layers.get(layerId);
         if (!layer) {
@@ -120,11 +120,26 @@ class LayerManager {
 
         // Add to layer data
         layer.features.push(...features);
+
+        // Determine the type to use for rendering
+        // If featureType is provided, use it; otherwise use layer's type
+        const typeToUse = featureType || layer.type;
+
+        // Check if layer now contains mixed types
+        const hasPoints = layer.features.some(f => f.latitude !== undefined && f.longitude !== undefined);
+        const hasPolygons = layer.features.some(f => f.wkt !== undefined);
+
+        if (hasPoints && hasPolygons && layer.type !== 'mixed') {
+            // Layer now contains both points and polygons
+            layer.type = 'mixed';
+            console.log(`Layer ${layerId} now contains mixed feature types`);
+        }
+
         layers.set(layerId, layer);
         this.layers = layers;
 
-        // Add to map
-        const color = this.mapManager.addFeaturesToLayer(layerId, features, layer.type, layer.color);
+        // Add to map with the specific feature type
+        const color = this.mapManager.addFeaturesToLayer(layerId, features, typeToUse, layer.color);
         layer.color = color;
 
         // Emit event
