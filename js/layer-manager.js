@@ -538,8 +538,8 @@ class LayerManager {
         // Remove existing layer from map
         this.mapManager.removeLayer(layerId);
 
-        // Create new data source
-        this.mapManager.createDataSource(layerId, layer.type === 'point');
+        // Create new data source with current visibility state
+        this.mapManager.createDataSource(layerId, layer.type === 'point', layer.visible);
 
         // Add filtered features
         if (features.length > 0) {
@@ -708,8 +708,8 @@ class LayerManager {
                     this.setLayerOpacity(layerId, layer.opacity);
                 }
             } else {
-                // Create empty data source
-                this.mapManager.createDataSource(layerId, layer.type === 'point');
+                // Create empty data source with layer's visibility state
+                this.mapManager.createDataSource(layerId, layer.type === 'point', layer.visible);
                 layer.color = this.mapManager.getNextColor();
             }
         }
