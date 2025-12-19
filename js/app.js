@@ -4179,10 +4179,52 @@ async function handleProfileChange() {
         return;
     }
 
-    // Confirm if there are unsaved changes
+    // Auto-save if there are unsaved changes
     if (stateManager.get('isDirty')) {
-        if (!confirm('You have unsaved changes. Do you want to switch workspaces anyway?')) {
-            // Reset select to current profile
+        console.log('🔄 Auto-saving before workspace switch...');
+        loadingManager.show('Saving current workspace...');
+
+        try {
+            // Save immediately (bypass debounce)
+            if (autoSaveTimeout) {
+                clearTimeout(autoSaveTimeout);
+            }
+
+            // Set timestamp to ignore our own echo
+            lastSaveHash = Date.now().toString();
+
+            // Temporarily disable listener to prevent feedback loop
+            const wasListening = realtimeListenerEnabled;
+            if (wasListening) {
+                firebaseManager.stopListening();
+                realtimeListenerEnabled = false;
+            }
+
+            isSavingToFirebase = true;
+
+            const layersData = layerManager.exportAllLayers();
+            const groupsData = Array.from(layerManager.layerGroups.values());
+
+            const dataToSave = {
+                ...layersData,
+                _groups: groupsData,
+                _timestamp: lastSaveHash
+            };
+
+            await firebaseManager.saveAllLayers(dataToSave, currentProfile.name);
+
+            console.log('✅ Workspace saved before switch');
+
+            // Re-enable listener will happen after profile switch loads new data
+            isSavingToFirebase = false;
+            stateManager.set('isDirty', false);
+
+            loadingManager.hide();
+        } catch (error) {
+            console.error('❌ Error saving before switch:', error);
+            isSavingToFirebase = false;
+            loadingManager.hide();
+            toastManager.error('Failed to save workspace: ' + error.message);
             profileSelect.value = currentProfile.id;
             return;
         }
