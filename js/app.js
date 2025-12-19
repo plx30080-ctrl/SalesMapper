@@ -4116,6 +4116,13 @@ async function switchProfile(profileId, showLoading = true) {
             loadingManager.show('Switching workspace...');
         }
 
+        // IMPORTANT: Disable real-time sync BEFORE switching to prevent race conditions
+        if (realtimeListenerEnabled) {
+            firebaseManager.stopListening();
+            realtimeListenerEnabled = false;
+            console.log('⏸️  Real-time sync temporarily disabled for profile switch');
+        }
+
         // Find profile in list
         const profiles = stateManager.getProfiles();
         const profile = profiles.find(p => p.id === profileId);
