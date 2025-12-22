@@ -947,6 +947,14 @@ class MapManager {
             this.removeLayer(layerId);
         });
 
+        // Ensure all polygon labels are cleared (defensive)
+        if (this.polygonLabels) {
+            this.polygonLabels.forEach((labels, layerId) => {
+                labels.forEach(label => label.setMap(null));
+            });
+            this.polygonLabels.clear();
+        }
+
         // Clear selected feature
         this.clearSelectedFeature();
 
@@ -1515,8 +1523,21 @@ class MapManager {
             return;
         }
 
-        const labels = [];
+        // Check if layer actually exists and is visible
         const layer = this.layers.get(layerId);
+        if (!layer) {
+            console.warn(`togglePolygonLabels: Layer ${layerId} not found`);
+            return;
+        }
+
+        // Check if layer's data layer is visible on the map (indicates layer visibility)
+        const isLayerVisible = layer.dataLayer && layer.dataLayer.getMap() !== null;
+        if (!isLayerVisible) {
+            console.log(`togglePolygonLabels: Layer ${layerId} is hidden, not showing labels`);
+            return;
+        }
+
+        const labels = [];
 
         features.forEach(feature => {
             if (!feature.wkt || !feature.name) return;
