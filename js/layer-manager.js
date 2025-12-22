@@ -684,6 +684,8 @@ class LayerManager {
                 showLabels: layerData.showLabels || false
             };
 
+            console.log(`📥 Importing layer: "${layer.name}" (${layerId}), visible=${layer.visible}, type=${layer.type}, features=${layer.features.length}, styleType=${layer.styleType || 'none'}`);
+
             // Store layer (don't add to layerOrder yet)
             this.layers.set(layerId, layer);
 

@@ -926,6 +926,7 @@ function updateLayerGroupList() {
         // Toggle group visibility
         groupItem.querySelector('.layer-group-toggle').addEventListener('click', (e) => {
             e.stopPropagation();
+            console.log(`👆 Group checkbox clicked: group="${group.name}", checked=${e.target.checked}, wasVisible=${group.visible}`);
             group.visible = e.target.checked;
             toggleGroupVisibility(group.id, group.visible);
         });
@@ -1266,9 +1267,16 @@ function switchTab(tabName) {
  * Toggle group visibility
  */
 function toggleGroupVisibility(groupId, visible) {
+    console.log(`🔘 toggleGroupVisibility called: groupId=${groupId}, visible=${visible}`);
+
     const layerGroups = layerManager.layerGroups;
     const group = layerGroups.get(groupId);
-    if (!group) return;
+    if (!group) {
+        console.log(`❌ Group not found: ${groupId}`);
+        return;
+    }
+
+    console.log(`📋 Group found: name="${group.name}", currentVisible=${group.visible}`);
 
     // Update group visibility in state
     group.visible = visible;
@@ -1280,21 +1288,30 @@ function toggleGroupVisibility(groupId, visible) {
     if (groupId === stateManager.get('allLayersGroupId')) {
         // For "All Layers", apply to all layers
         layerIds = layerManager.getAllLayers().map(l => l.id);
+        console.log(`📍 "All Layers" group detected - processing ${layerIds.length} layers`);
     } else {
         layerIds = group.layerIds || [];
+        console.log(`📍 Regular group - processing ${layerIds.length} layers in group`);
     }
+
+    console.log(`🔄 About to toggle ${layerIds.length} layers to visible=${visible}`);
 
     // Update each layer's visibility and persist to state
     const layers = layerManager.layers;
-    layerIds.forEach(layerId => {
+    layerIds.forEach((layerId, index) => {
         const layer = layers.get(layerId);
         if (layer) {
+            console.log(`  [${index + 1}/${layerIds.length}] Toggling layer "${layer.name}" (${layerId}) from ${layer.visible} to ${visible}`);
             layer.visible = visible;
             layers.set(layerId, layer);
             mapManager.toggleLayerVisibility(layerId, visible);
+        } else {
+            console.log(`  [${index + 1}/${layerIds.length}] ⚠️ Layer not found: ${layerId}`);
         }
     });
     layerManager.layers = layers;
+
+    console.log(`✅ toggleGroupVisibility complete - updated ${layerIds.length} layers`);
 
     // Update UI without triggering full refresh (avoid layer list filtering issues)
     updateLayerGroupList();

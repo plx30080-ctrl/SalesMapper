@@ -378,10 +378,14 @@ class MapManager {
      * @returns {google.maps.Data}
      */
     createDataSource(layerId, enableClustering = false, initiallyVisible = true) {
+        console.log(`📦 createDataSource: layerId=${layerId}, clustering=${enableClustering}, initiallyVisible=${initiallyVisible}`);
         const dataLayer = new google.maps.Data();
         // Only add to map if layer should be initially visible
         if (initiallyVisible) {
+            console.log(`  ✅ Setting dataLayer.setMap(this.map) - layer WILL be visible`);
             dataLayer.setMap(this.map);
+        } else {
+            console.log(`  ⏭️ NOT setting map - layer will be hidden`);
         }
         this.dataSources.set(layerId, { dataLayer, enableClustering });
         return dataLayer;
@@ -792,25 +796,57 @@ class MapManager {
      * @param {boolean} visible - Visibility state
      */
     toggleLayerVisibility(layerId, visible) {
+        console.log(`    🗺️ mapManager.toggleLayerVisibility: layerId=${layerId}, visible=${visible}`);
+
         const layer = this.layers.get(layerId);
         if (!layer) {
+            console.log(`    ❌ Layer not found in mapManager: ${layerId}`);
             return;
         }
 
+        console.log(`    📊 Layer info: type=${layer.type}, hasDataLayer=${!!layer.dataLayer}, hasClusterer=${!!layer.clusterer}, markerCount=${layer.markers?.length || 0}`);
+
         // Toggle data layer visibility (polygons and mixed layers use this)
         if (layer.dataLayer && (layer.type === 'polygon' || layer.type === 'mixed')) {
+            const mapBefore = layer.dataLayer.getMap();
             layer.dataLayer.setMap(visible ? this.map : null);
+            const mapAfter = layer.dataLayer.getMap();
+            console.log(`    🔷 DataLayer: setMap from ${mapBefore ? 'map' : 'null'} to ${mapAfter ? 'map' : 'null'}`);
         }
 
         // Toggle clusterer visibility
         if (layer.clusterer) {
+            const mapBefore = layer.clusterer.getMap();
             layer.clusterer.setMap(visible ? this.map : null);
+            const mapAfter = layer.clusterer.getMap();
+            const markerCount = layer.clusterer.getMarkers ? layer.clusterer.getMarkers().length : 'unknown';
+            console.log(`    🔵 Clusterer: setMap from ${mapBefore ? 'map' : 'null'} to ${mapAfter ? 'map' : 'null'}, markers=${markerCount}`);
+
+            // Additional debugging for clusterer
+            if (layer.clusterer.getMarkers) {
+                const markers = layer.clusterer.getMarkers();
+                console.log(`    🔍 Clusterer has ${markers.length} markers`);
+                if (markers.length > 0) {
+                    const sampleMarker = markers[0];
+                    console.log(`    🔍 Sample marker map: ${sampleMarker.getMap() ? 'has map' : 'no map'}`);
+                }
+            }
         } else if (layer.markers) {
             // Toggle markers visibility (only if not using clusterer)
-            layer.markers.forEach(marker => {
+            console.log(`    📍 Toggling ${layer.markers.length} individual markers`);
+            layer.markers.forEach((marker, idx) => {
+                const before = marker.getMap();
                 marker.setMap(visible ? this.map : null);
+                const after = marker.getMap();
+                if (idx < 3) { // Log first 3 markers
+                    console.log(`      Marker ${idx}: ${before ? 'map' : 'null'} → ${after ? 'map' : 'null'}`);
+                }
             });
+        } else {
+            console.log(`    ⚠️ Layer has no clusterer or markers array`);
         }
+
+        console.log(`    ✅ mapManager.toggleLayerVisibility complete for ${layerId}`);
     }
 
     /**
