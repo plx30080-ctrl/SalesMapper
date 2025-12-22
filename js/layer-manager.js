@@ -97,6 +97,13 @@ class LayerManager {
             // Create empty data source
             this.mapManager.createDataSource(layerId, type === 'point');
             layer.color = this.mapManager.getNextColor();
+
+            // Add empty layer to mapManager.layers so it can be toggled and synced
+            if (type === 'polygon') {
+                this.mapManager.addPolygonLayer(layerId, layer.color, layer.visible);
+            } else if (type === 'point') {
+                this.mapManager.addPointLayer(layerId, layer.color, layer.visible);
+            }
         }
 
         // Emit event
@@ -712,6 +719,13 @@ class LayerManager {
                 // Create empty data source with layer's visibility state
                 this.mapManager.createDataSource(layerId, layer.type === 'point', layer.visible);
                 layer.color = this.mapManager.getNextColor();
+
+                // Add empty layer to mapManager.layers so it can be toggled and synced
+                if (layer.type === 'polygon') {
+                    this.mapManager.addPolygonLayer(layerId, layer.color, layer.visible);
+                } else if (layer.type === 'point') {
+                    this.mapManager.addPointLayer(layerId, layer.color, layer.visible);
+                }
             }
         }
 

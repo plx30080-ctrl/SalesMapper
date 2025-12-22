@@ -547,3 +547,6 @@ const toastManager = new ToastManager();
 const loadingManager = new LoadingManager();
 const contextMenuManager = new ContextMenuManager();
 const eventBus = new EventBus();
+
+// Make eventBus globally accessible for ActivityLog and NotificationCenter
+window.eventBus = eventBus;

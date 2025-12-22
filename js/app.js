@@ -488,21 +488,86 @@ function setupEventListeners() {
 
     // Quick Action Buttons
     document.getElementById('showUploadBtn').addEventListener('click', () => modalManager.show('uploadModal'));
-    document.getElementById('showSearchBtn').addEventListener('click', () => modalManager.show('searchModal'));
-    document.getElementById('showDrawToolsBtn').addEventListener('click', () => modalManager.show('drawToolsModal'));
+
+    // Dropdown Menu Toggle Functionality
+    const menuButtons = {
+        'toolsMenuBtn': 'toolsMenu',
+        'pluginsMenuBtn': 'pluginsMenu',
+        'settingsMenuBtn': 'settingsMenu'
+    };
+
+    // Function to close all menus
+    function closeAllMenus() {
+        Object.values(menuButtons).forEach(menuId => {
+            const menu = document.getElementById(menuId);
+            if (menu) menu.style.display = 'none';
+        });
+    }
+
+    // Setup menu button click handlers
+    Object.entries(menuButtons).forEach(([btnId, menuId]) => {
+        const btn = document.getElementById(btnId);
+        const menu = document.getElementById(menuId);
+
+        if (btn && menu) {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isCurrentlyOpen = menu.style.display === 'block';
+                closeAllMenus();
+                menu.style.display = isCurrentlyOpen ? 'none' : 'block';
+            });
+        }
+    });
+
+    // Close menus when clicking outside
+    document.addEventListener('click', () => {
+        closeAllMenus();
+    });
+
+    // Prevent menu clicks from closing the menu
+    document.querySelectorAll('.dropdown-menu').forEach(menu => {
+        menu.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+    });
+
+    // Menu Item Handlers - Tools Menu
+    document.getElementById('showSearchBtn').addEventListener('click', () => {
+        modalManager.show('searchModal');
+        closeAllMenus();
+    });
+    document.getElementById('showDrawToolsBtn').addEventListener('click', () => {
+        modalManager.show('drawToolsModal');
+        closeAllMenus();
+    });
     document.getElementById('measureDistanceBtn').addEventListener('click', () => {
         if (distanceTool) {
             distanceTool.toggle();
-            // Toggle button active state
             const btn = document.getElementById('measureDistanceBtn');
             btn.classList.toggle('active', distanceTool.isActive);
-
             if (distanceTool.isActive) {
                 toastManager.info('Click two points on the map to measure distance');
             }
         }
+        closeAllMenus();
     });
-    document.getElementById('showFilterBtn').addEventListener('click', () => modalManager.show('filterModal'));
+
+    // Menu Item Handlers - Settings Menu
+    document.getElementById('showFilterBtn').addEventListener('click', () => {
+        modalManager.show('filterModal');
+        closeAllMenus();
+    });
+
+    // Debug Console Toggle
+    document.getElementById('toggleDebugConsoleBtn').addEventListener('click', () => {
+        const debugPanel = document.getElementById('debugConsole');
+        if (debugPanel) {
+            const isHidden = debugPanel.style.display === 'none';
+            debugPanel.style.display = isHidden ? 'block' : 'none';
+            toastManager.success(isHidden ? 'Debug console shown' : 'Debug console hidden');
+        }
+        closeAllMenus();
+    });
 
     // v3.0: Distance Measurement Controls
     document.getElementById('clearMeasurementBtn').addEventListener('click', () => {
@@ -551,6 +616,7 @@ function setupEventListeners() {
         if (confirm('This will update all feature names to match their account names (where available). Continue?')) {
             massUpdateNamesToAccountNames();
         }
+        closeAllMenus();
     });
 
     // Layer Search
@@ -592,7 +658,11 @@ function setupEventListeners() {
     document.getElementById('loadFromFirebase').addEventListener('click', handleLoadFromFirebase);
 
     // Plugins
-    document.getElementById('showPluginsBtn').addEventListener('click', showPluginsModal);
+    // Plugins Menu Handlers
+    document.getElementById('showPluginsBtn').addEventListener('click', () => {
+        showPluginsModal();
+        closeAllMenus();
+    });
     document.getElementById('closePluginsBtn').addEventListener('click', () => modalManager.close('pluginsModal'));
 
     // v3.0: Cluster Settings
@@ -603,7 +673,17 @@ function setupEventListeners() {
         } else {
             toastManager.error('Cluster manager not available');
         }
+        closeAllMenus();
     });
+
+    // Heatmap Button (placeholder for future implementation)
+    const heatmapBtn = document.getElementById('showHeatmapBtn');
+    if (heatmapBtn) {
+        heatmapBtn.addEventListener('click', () => {
+            toastManager.info('Heatmap feature coming soon!');
+            closeAllMenus();
+        });
+    }
 
     // Map Controls
     document.getElementById('zoomIn').addEventListener('click', () => mapManager.zoomIn());
@@ -3474,6 +3554,68 @@ function updateFeatureInfo(properties) {
         return;
     }
 
+    // Add color picker (only if layer has no property-based styling)
+    if (mapManager.selectedFeature) {
+        const layerId = mapManager.selectedFeature.layerId;
+        const layer = layerManager.layers.get(layerId);
+
+        // Only show color picker if layer doesn't have property-based styling
+        if (layer && !layer.styleType) {
+            const colorContainer = document.createElement('div');
+            colorContainer.style.marginTop = '1rem';
+            colorContainer.style.padding = '0.75rem';
+            colorContainer.style.backgroundColor = '#f5f5f5';
+            colorContainer.style.borderRadius = '4px';
+            colorContainer.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                    <label style="font-weight: 500; margin: 0;">Feature Color:</label>
+                    <input type="color" id="featureColorPicker" value="${properties.color || layer.color || '#3388ff'}"
+                           style="width: 50px; height: 30px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer;">
+                    <button id="clearFeatureColor" class="btn btn-secondary" style="font-size: 0.875rem; padding: 0.25rem 0.5rem;">
+                        Reset
+                    </button>
+                </div>
+                <div style="font-size: 0.75rem; color: #666;">
+                    Set a custom color for this feature
+                </div>
+            `;
+            featureInfo.appendChild(colorContainer);
+
+            // Add event listeners
+            const colorPicker = colorContainer.querySelector('#featureColorPicker');
+            const clearBtn = colorContainer.querySelector('#clearFeatureColor');
+
+            colorPicker.addEventListener('change', (e) => {
+                const featureId = mapManager.selectedFeature.feature.getId();
+                mapManager.setFeatureColor(layerId, featureId, e.target.value);
+
+                // Update feature data in layerManager
+                const featureIndex = layer.features.findIndex(f => f.id === featureId);
+                if (featureIndex !== -1) {
+                    layer.features[featureIndex].color = e.target.value;
+                    layerManager.layers.set(layerId, layer);
+                }
+
+                toastManager.success('Feature color updated');
+            });
+
+            clearBtn.addEventListener('click', () => {
+                const featureId = mapManager.selectedFeature.feature.getId();
+                mapManager.clearFeatureColor(layerId, featureId);
+
+                // Remove color from feature data
+                const featureIndex = layer.features.findIndex(f => f.id === featureId);
+                if (featureIndex !== -1) {
+                    delete layer.features[featureIndex].color;
+                    layerManager.layers.set(layerId, layer);
+                }
+
+                colorPicker.value = layer.color || '#3388ff';
+                toastManager.success('Feature color reset to layer default');
+            });
+        }
+    }
+
     // Add button container
     const btnContainer = document.createElement('div');
     btnContainer.style.display = 'flex';
@@ -4007,9 +4149,42 @@ function massUpdateNamesToAccountNames() {
         let layerUpdated = false;
 
         layer.features.forEach(feature => {
-            // Check if feature has account_name property and it differs from name
-            if (feature.account_name && feature.account_name !== feature.name) {
-                feature.name = feature.account_name;
+            // Try to find account name property in various formats (case-insensitive)
+            let accountName = null;
+
+            // List of possible property names for account name (in order of priority)
+            const accountNameKeys = [
+                'accountName',       // camelCase
+                'AccountName',       // PascalCase
+                'account_name',      // snake_case
+                'Account Name',      // Title Case with space
+                'account name',      // lowercase with space
+                'ACCOUNT NAME',      // uppercase with space
+                'Account_Name'       // Title_Snake_Case
+            ];
+
+            // Find first matching key (case-sensitive exact match first)
+            for (const key of accountNameKeys) {
+                if (feature[key]) {
+                    accountName = feature[key];
+                    break;
+                }
+            }
+
+            // If no exact match, try case-insensitive search
+            if (!accountName) {
+                const featureKeys = Object.keys(feature);
+                const matchKey = featureKeys.find(k =>
+                    k.toLowerCase().replace(/[_\s]/g, '') === 'accountname'
+                );
+                if (matchKey) {
+                    accountName = feature[matchKey];
+                }
+            }
+
+            // Update name if account name found and it differs from current name
+            if (accountName && accountName !== feature.name) {
+                feature.name = accountName;
                 updatedCount++;
                 layerUpdated = true;
             }
@@ -4221,6 +4396,12 @@ async function switchProfile(profileId, showLoading = true) {
 
         // Re-enable real-time sync for the new profile
         enableRealtimeSync();
+
+        // Emit profile.switched event for activity log
+        eventBus.emit('profile.switched', {
+            profileId: profileId,
+            profileName: profile.name
+        });
 
         if (showLoading) {
             loadingManager.hide();

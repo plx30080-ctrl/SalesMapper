@@ -407,8 +407,13 @@ class MapManager {
 
         const dataLayer = dataSource.dataLayer;
 
-        // Set style for polygons
-        dataLayer.setStyle(() => this.buildPolygonStyle(color));
+        // Set style for polygons - support per-feature color overrides
+        dataLayer.setStyle((feature) => {
+            // Check if feature has a custom color (individual override)
+            const featureColor = feature.getProperty('color');
+            const colorToUse = featureColor || color; // Use feature color if available, otherwise layer color
+            return this.buildPolygonStyle(colorToUse);
+        });
 
         // Store layer reference
         this.layers.set(layerId, {
@@ -927,6 +932,101 @@ class MapManager {
             Object.keys(newProperties).forEach(key => {
                 targetFeature.setProperty(key, newProperties[key]);
             });
+        }
+    }
+
+    /**
+     * Set individual feature color (only works when layer has no property-based styling)
+     * @param {string} layerId - Layer ID
+     * @param {string} featureId - Feature ID
+     * @param {string} color - Hex color code
+     */
+    setFeatureColor(layerId, featureId, color) {
+        const dataSource = this.dataSources.get(layerId);
+        if (!dataSource || !dataSource.dataLayer) return;
+
+        const dataLayer = dataSource.dataLayer;
+        let targetFeature = null;
+
+        dataLayer.forEach((feature) => {
+            if (feature.getId() === featureId) {
+                targetFeature = feature;
+            }
+        });
+
+        if (targetFeature) {
+            // Set color property on the feature
+            targetFeature.setProperty('color', color);
+
+            // Force style refresh by re-setting the style function
+            const currentStyle = dataLayer.getStyle();
+            if (typeof currentStyle === 'function') {
+                // Trigger re-render by calling setStyle again
+                dataLayer.setStyle(currentStyle);
+            }
+
+            // For markers, we need to update the marker icon color
+            const layer = this.layers.get(layerId);
+            if (layer && layer.markers) {
+                const marker = layer.markers.find(m => m.feature?.getId() === featureId);
+                if (marker) {
+                    const currentIcon = marker.getIcon();
+                    marker.setIcon({
+                        ...currentIcon,
+                        fillColor: color
+                    });
+                }
+            }
+
+            // For clustered markers
+            if (layer && layer.clusterer) {
+                // Clusterers need to be recreated to show new colors
+                // This will be handled by the cluster refresh mechanism
+                console.log('Note: Clustered marker colors will update on next cluster refresh');
+            }
+        }
+    }
+
+    /**
+     * Clear individual feature color override, reverting to layer default
+     * @param {string} layerId - Layer ID
+     * @param {string} featureId - Feature ID
+     */
+    clearFeatureColor(layerId, featureId) {
+        const dataSource = this.dataSources.get(layerId);
+        if (!dataSource || !dataSource.dataLayer) return;
+
+        const dataLayer = dataSource.dataLayer;
+        let targetFeature = null;
+
+        dataLayer.forEach((feature) => {
+            if (feature.getId() === featureId) {
+                targetFeature = feature;
+            }
+        });
+
+        if (targetFeature) {
+            // Remove color property
+            targetFeature.setProperty('color', null);
+
+            // Force style refresh
+            const currentStyle = dataLayer.getStyle();
+            if (typeof currentStyle === 'function') {
+                dataLayer.setStyle(currentStyle);
+            }
+
+            // For markers, restore default layer color
+            const layer = this.layers.get(layerId);
+            if (layer && layer.markers) {
+                const marker = layer.markers.find(m => m.feature?.getId() === featureId);
+                if (marker) {
+                    const currentIcon = marker.getIcon();
+                    marker.setIcon({
+                        ...currentIcon,
+                        fillColor: layer.color
+                    });
+                }
+            }
         }
     }
 
