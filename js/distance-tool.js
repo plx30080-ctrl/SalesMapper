@@ -24,6 +24,11 @@ class DistanceTool {
         this.isActive = true;
         this.map.setOptions({ draggableCursor: 'crosshair' });
 
+        // Disable layer clickability so measurements can be made over features
+        if (this.mapManager && this.mapManager.updateLayerClickability) {
+            this.mapManager.updateLayerClickability(false);
+        }
+
         // Add click listener for placing markers
         this.measurementListener = this.map.addListener('click', (e) => {
             this.addMeasurementPoint(e.latLng);
@@ -43,6 +48,11 @@ class DistanceTool {
 
         this.isActive = false;
         this.map.setOptions({ draggableCursor: null });
+
+        // Re-enable layer clickability
+        if (this.mapManager && this.mapManager.updateLayerClickability) {
+            this.mapManager.updateLayerClickability(true);
+        }
 
         // Remove click listener
         if (this.measurementListener) {

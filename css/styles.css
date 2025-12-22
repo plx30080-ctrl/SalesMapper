@@ -396,7 +396,7 @@ body {
     position: absolute;
     top: 100%;
     left: 0;
-    right: 0;
+    min-width: 180px;
     margin-top: 0.25rem;
     background: var(--bg-primary);
     border: 1px solid var(--border-color);
@@ -404,12 +404,13 @@ body {
     box-shadow: var(--shadow-lg);
     z-index: 1000;
     overflow: hidden;
+    white-space: nowrap;
 }
 
 .dropdown-menu .menu-item {
     width: 100%;
     padding: 0.625rem 0.75rem;
-    font-size: 0.85rem;
+    font-size: 0.875rem;
     text-align: left;
     background: transparent;
     border: none;
@@ -433,6 +434,7 @@ body {
 
 .dropdown-menu .menu-item span {
     font-size: 1rem;
+    flex-shrink: 0;
 }
 
 /* ===== Upload Section ===== */
