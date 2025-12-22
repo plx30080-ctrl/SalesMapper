@@ -37,7 +37,6 @@ class ClusterManager {
      * @param {boolean} initiallyVisible - Whether layer should be visible initially
      */
     initializeForLayer(layerId, markers, color, initiallyVisible = true) {
-        console.log(`🔧 ClusterManager.initializeForLayer: ${layerId}, initiallyVisible = ${initiallyVisible}`);
 
         if (!markers || markers.length === 0) {
             return null;

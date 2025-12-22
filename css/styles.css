@@ -3312,3 +3312,336 @@ body {
 .sync-text {
     font-weight: 500;
 }
+
+/* ===== Debug Console ===== */
+.debug-toggle-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: var(--bg-dark);
+    border: 2px solid var(--primary-color);
+    color: white;
+    cursor: pointer;
+    z-index: 9998;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    box-shadow: var(--shadow-lg);
+    transition: var(--transition);
+}
+
+.debug-toggle-btn:hover {
+    background: var(--primary-color);
+    transform: scale(1.1);
+}
+
+.debug-icon {
+    font-size: 24px;
+}
+
+.debug-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    background: var(--primary-color);
+    color: white;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.debug-badge.warn {
+    background: var(--warning-color);
+    color: #000;
+}
+
+.debug-badge.error {
+    background: var(--danger-color);
+}
+
+.debug-console-panel {
+    position: fixed;
+    bottom: 80px;
+    right: 20px;
+    width: 600px;
+    max-width: calc(100vw - 40px);
+    height: 500px;
+    max-height: calc(100vh - 120px);
+    background: var(--bg-dark);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    z-index: 9999;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 12px;
+}
+
+.debug-console-panel.show {
+    display: flex;
+}
+
+.debug-console-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    background: var(--bg-dark-secondary);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    cursor: grab;
+}
+
+.debug-console-header h3 {
+    color: var(--secondary-color);
+    font-size: 14px;
+    margin: 0;
+}
+
+.debug-console-actions {
+    display: flex;
+    gap: 5px;
+}
+
+.debug-btn {
+    padding: 4px 10px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.1);
+    color: #ccc;
+    cursor: pointer;
+    font-size: 11px;
+    transition: var(--transition);
+}
+
+.debug-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.debug-btn-danger {
+    background: rgba(209, 52, 56, 0.3);
+}
+
+.debug-btn-danger:hover {
+    background: var(--danger-color);
+}
+
+.debug-console-filters {
+    display: flex;
+    gap: 10px;
+    padding: 8px 15px;
+    background: rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.debug-console-filters label {
+    color: #aaa;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+}
+
+.debug-console-filters input[type="checkbox"] {
+    cursor: pointer;
+}
+
+.debug-search {
+    flex: 1;
+    min-width: 150px;
+    padding: 4px 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: var(--radius-sm);
+    background: rgba(0, 0, 0, 0.3);
+    color: white;
+    font-size: 11px;
+}
+
+.debug-search::placeholder {
+    color: #666;
+}
+
+.debug-console-logs {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    background: #0d1117;
+}
+
+.debug-empty {
+    color: #666;
+    text-align: center;
+    padding: 40px;
+}
+
+.debug-log-entry {
+    padding: 6px 10px;
+    margin-bottom: 4px;
+    border-radius: var(--radius-sm);
+    border-left: 3px solid transparent;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.debug-log-entry:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.debug-log-entry.expandable {
+    cursor: pointer;
+}
+
+.debug-log-entry.expanded .debug-log-details {
+    display: block;
+}
+
+.debug-log-main {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.debug-log-time {
+    color: #666;
+    font-size: 10px;
+    white-space: nowrap;
+}
+
+.debug-log-type {
+    font-size: 9px;
+    font-weight: bold;
+    padding: 1px 4px;
+    border-radius: 2px;
+    white-space: nowrap;
+}
+
+.debug-log {
+    border-left-color: #58a6ff;
+}
+
+.debug-log .debug-log-type {
+    background: rgba(88, 166, 255, 0.2);
+    color: #58a6ff;
+}
+
+.debug-info {
+    border-left-color: #79c0ff;
+}
+
+.debug-info .debug-log-type {
+    background: rgba(121, 192, 255, 0.2);
+    color: #79c0ff;
+}
+
+.debug-warn {
+    border-left-color: var(--warning-color);
+}
+
+.debug-warn .debug-log-type {
+    background: rgba(255, 185, 0, 0.2);
+    color: var(--warning-color);
+}
+
+.debug-error {
+    border-left-color: var(--danger-color);
+    background: rgba(209, 52, 56, 0.1);
+}
+
+.debug-error .debug-log-type {
+    background: rgba(209, 52, 56, 0.3);
+    color: #f97583;
+}
+
+.debug-event {
+    border-left-color: #a371f7;
+}
+
+.debug-event .debug-log-type {
+    background: rgba(163, 113, 247, 0.2);
+    color: #a371f7;
+}
+
+.debug-log-message {
+    color: #c9d1d9;
+    flex: 1;
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+.debug-copy-entry {
+    padding: 2px 6px;
+    font-size: 9px;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    border-radius: 2px;
+    color: #888;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.1s;
+}
+
+.debug-log-entry:hover .debug-copy-entry {
+    opacity: 1;
+}
+
+.debug-copy-entry:hover {
+    background: var(--primary-color);
+    color: white;
+}
+
+.debug-log-details {
+    display: none;
+    margin-top: 8px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-sm);
+    color: #8b949e;
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.debug-console-footer {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 15px;
+    background: var(--bg-dark-secondary);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    color: #666;
+    font-size: 10px;
+}
+
+/* Scrollbar styling for debug console */
+.debug-console-logs::-webkit-scrollbar {
+    width: 8px;
+}
+
+.debug-console-logs::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.debug-console-logs::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+.debug-console-logs::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}

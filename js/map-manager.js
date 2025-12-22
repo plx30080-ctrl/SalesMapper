@@ -378,14 +378,10 @@ class MapManager {
      * @returns {google.maps.Data}
      */
     createDataSource(layerId, enableClustering = false, initiallyVisible = true) {
-        console.log(`📍 createDataSource: ${layerId}, initiallyVisible = ${initiallyVisible}`);
         const dataLayer = new google.maps.Data();
         // Only add to map if layer should be initially visible
         if (initiallyVisible) {
-            console.log(`   ✅ Adding dataLayer to map`);
             dataLayer.setMap(this.map);
-        } else {
-            console.log(`   ⏸️  NOT adding dataLayer to map (will be hidden)`);
         }
         this.dataSources.set(layerId, { dataLayer, enableClustering });
         return dataLayer;
@@ -796,33 +792,21 @@ class MapManager {
      * @param {boolean} visible - Visibility state
      */
     toggleLayerVisibility(layerId, visible) {
-        console.log(`👁️ toggleLayerVisibility: ${layerId}, visible = ${visible}`);
         const layer = this.layers.get(layerId);
         if (!layer) {
-            console.log(`   ⚠️ Layer not found in mapManager.layers`);
             return;
         }
 
-        console.log(`   Layer type: ${layer.type}, has dataLayer: ${!!layer.dataLayer}, has clusterer: ${!!layer.clusterer}, has markers: ${!!layer.markers}`);
-
         // Toggle data layer visibility (polygons and mixed layers use this)
         if (layer.dataLayer && (layer.type === 'polygon' || layer.type === 'mixed')) {
-            console.log(`   ${visible ? '✅ Adding' : '⏸️ Removing'} polygon dataLayer ${visible ? 'to' : 'from'} map`);
             layer.dataLayer.setMap(visible ? this.map : null);
         }
 
         // Toggle clusterer visibility
         if (layer.clusterer) {
-            if (visible) {
-                console.log(`   ✅ Adding clusterer to map`);
-                layer.clusterer.setMap(this.map);
-            } else {
-                console.log(`   ⏸️ Removing clusterer from map`);
-                layer.clusterer.setMap(null);
-            }
+            layer.clusterer.setMap(visible ? this.map : null);
         } else if (layer.markers) {
             // Toggle markers visibility (only if not using clusterer)
-            console.log(`   ${visible ? '✅ Adding' : '⏸️ Removing'} ${layer.markers.length} markers ${visible ? 'to' : 'from'} map`);
             layer.markers.forEach(marker => {
                 marker.setMap(visible ? this.map : null);
             });
