@@ -527,6 +527,8 @@ class MapManager {
         const pinPath = AppConfig.marker.pinPath;
 
         // Get all features from data layer
+        let markerCount = 0;
+        let sampleMarkerMap = null;
         dataLayer.forEach((feature) => {
             const geometry = feature.getGeometry();
             if (geometry.getType() === 'Point') {
@@ -536,7 +538,8 @@ class MapManager {
                 // Don't set map yet if clustering - let clusterer handle it
                 // Also respect initiallyVisible parameter
                 const markerMap = (dataSource.enableClustering || !initiallyVisible) ? null : this.map;
-                console.log(`   📌 Creating marker: clustering=${dataSource.enableClustering}, initiallyVisible=${initiallyVisible}, map=${markerMap ? 'this.map' : 'null'}`);
+                if (markerCount === 0) sampleMarkerMap = markerMap; // Capture first marker's map for logging
+
                 const marker = new google.maps.Marker({
                     position: { lat: position.lat(), lng: position.lng() },
                     map: markerMap,
@@ -563,8 +566,12 @@ class MapManager {
                 });
 
                 markers.push(marker);
+                markerCount++;
             }
         });
+
+        // Log summary instead of logging each marker
+        console.log(`   📌 Created ${markerCount} markers: clustering=${dataSource.enableClustering}, initiallyVisible=${initiallyVisible}, map=${sampleMarkerMap ? 'this.map' : 'null'}`);
 
         // Store markers for later reference
         this.markers.set(layerId, markers);
