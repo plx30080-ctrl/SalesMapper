@@ -885,6 +885,13 @@ class MapManager {
             layer.markers.forEach(marker => marker.setMap(null));
         }
 
+        // Remove polygon labels
+        if (this.polygonLabels && this.polygonLabels.has(layerId)) {
+            const labels = this.polygonLabels.get(layerId);
+            labels.forEach(label => label.setMap(null));
+            this.polygonLabels.delete(layerId);
+        }
+
         // Remove from storage
         this.layers.delete(layerId);
         this.dataSources.delete(layerId);
