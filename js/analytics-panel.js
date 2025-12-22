@@ -10,6 +10,7 @@ class AnalyticsPanel {
         this.stateManager = stateManager;
         this.refreshInterval = null;
         this.activeView = 'overview'; // overview, layers, performance
+        this.selectedGroupId = null; // null = all groups
     }
 
     /**
@@ -23,18 +24,85 @@ class AnalyticsPanel {
 
     /**
      * Calculate all metrics
+     * @param {string} groupId - Optional group ID to filter by
      * @returns {Object} Comprehensive metrics object
      */
-    calculateMetrics() {
-        const layers = this.layerManager.getAllLayers();
+    calculateMetrics(groupId = null) {
+        let layers = this.layerManager.getAllLayers();
+
+        // Filter by group if specified
+        if (groupId) {
+            layers = layers.filter(l => l.groupId === groupId);
+        }
+
         const metrics = {
             overview: this.calculateOverviewMetrics(layers),
             layers: this.calculateLayerMetrics(layers),
             performance: this.calculatePerformanceMetrics(layers),
-            coverage: this.calculateCoverageMetrics(layers)
+            coverage: this.calculateCoverageMetrics(layers),
+            groups: this.calculateGroupMetrics()
         };
 
         return metrics;
+    }
+
+    /**
+     * Get all layer groups
+     * @returns {Array} Array of group objects
+     */
+    getAllGroups() {
+        const layerGroups = this.layerManager.layerGroups;
+        if (!layerGroups || layerGroups.size === 0) {
+            return [];
+        }
+
+        // Convert Map to Array
+        if (layerGroups instanceof Map) {
+            return Array.from(layerGroups.values());
+        } else if (typeof layerGroups === 'object') {
+            return Object.values(layerGroups);
+        }
+
+        return [];
+    }
+
+    /**
+     * Calculate metrics for each layer group
+     * @returns {Array} Array of group metrics
+     */
+    calculateGroupMetrics() {
+        const groups = this.getAllGroups();
+        const allLayers = this.layerManager.getAllLayers();
+
+        return groups.map(group => {
+            const groupLayers = allLayers.filter(l => l.groupId === group.id);
+            const pointLayers = groupLayers.filter(l => l.type === 'point');
+            const polygonLayers = groupLayers.filter(l => l.type === 'polygon');
+
+            const totalPoints = pointLayers.reduce((sum, l) => sum + l.features.length, 0);
+            const totalPolygons = polygonLayers.reduce((sum, l) => sum + l.features.length, 0);
+
+            // Calculate total area for polygon layers in this group
+            let totalArea = 0;
+            polygonLayers.forEach(layer => {
+                totalArea += Utils.calculateTotalArea(layer.features);
+            });
+
+            // Calculate density (points per square mile)
+            const density = totalArea > 0 ? (totalPoints / (totalArea / 2589988.11)) : 0;
+
+            return {
+                id: group.id,
+                name: group.name,
+                layerCount: groupLayers.length,
+                totalPoints: totalPoints,
+                totalPolygons: totalPolygons,
+                totalArea: totalArea,
+                totalAreaFormatted: Utils.formatArea(totalArea),
+                density: density,
+                densityFormatted: density.toFixed(2)
+            };
+        });
     }
 
     /**
@@ -336,10 +404,19 @@ class AnalyticsPanel {
     }
 
     /**
+     * Set selected group filter
+     * @param {string} groupId - Group ID to filter by (null for all)
+     */
+    setGroupFilter(groupId) {
+        this.selectedGroupId = groupId;
+        this.render();
+    }
+
+    /**
      * Render analytics dashboard
      */
     render() {
-        const metrics = this.calculateMetrics();
+        const metrics = this.calculateMetrics(this.selectedGroupId);
         const container = document.getElementById('analyticsContent');
 
         if (!container) {
@@ -347,10 +424,59 @@ class AnalyticsPanel {
             return;
         }
 
-        container.innerHTML = this.renderOverview(metrics.overview) +
+        container.innerHTML = this.renderGroupSelector() +
+                              this.renderOverview(metrics.overview) +
+                              this.renderGroupMetrics(metrics.groups) +
                               this.renderPerformance(metrics.performance) +
                               this.renderLayerMetrics(metrics.layers) +
                               this.renderCoverageAnalysis(metrics.coverage);
+
+        // Setup group selector event listener
+        this.setupGroupSelectorListener();
+    }
+
+    /**
+     * Render group selector dropdown
+     */
+    renderGroupSelector() {
+        const groups = this.getAllGroups();
+
+        if (groups.length === 0) {
+            return ''; // No groups to select from
+        }
+
+        const selectedName = this.selectedGroupId
+            ? (groups.find(g => g.id === this.selectedGroupId)?.name || 'All Groups')
+            : 'All Groups';
+
+        return `
+            <div class="analytics-section">
+                <div class="analytics-filter">
+                    <label for="analyticsGroupFilter" style="margin-right: 0.5rem; font-weight: 600;">Filter by Group:</label>
+                    <select id="analyticsGroupFilter" class="form-select" style="max-width: 300px;">
+                        <option value="">All Groups</option>
+                        ${groups.map(group => `
+                            <option value="${group.id}" ${group.id === this.selectedGroupId ? 'selected' : ''}>
+                                ${group.name}
+                            </option>
+                        `).join('')}
+                    </select>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Setup group selector event listener
+     */
+    setupGroupSelectorListener() {
+        const selector = document.getElementById('analyticsGroupFilter');
+        if (selector) {
+            selector.addEventListener('change', (e) => {
+                const groupId = e.target.value || null;
+                this.setGroupFilter(groupId);
+            });
+        }
     }
 
     /**
@@ -386,6 +512,53 @@ class AnalyticsPanel {
                         <div class="metric-label">Points per Sq Mi</div>
                     </div>
                 </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Render group metrics section
+     */
+    renderGroupMetrics(groups) {
+        // Don't show group breakdown when a specific group is selected
+        if (this.selectedGroupId || !groups || groups.length === 0) {
+            return '';
+        }
+
+        return `
+            <div class="analytics-section">
+                <h3>🏢 Layer Groups Breakdown</h3>
+                <div class="layer-metrics-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Group Name</th>
+                                <th>Layers</th>
+                                <th>Points</th>
+                                <th>Territories</th>
+                                <th>Coverage</th>
+                                <th>Density (pts/sq mi)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${groups.map(group => `
+                                <tr>
+                                    <td class="layer-name-cell">
+                                        <strong>${group.name}</strong>
+                                    </td>
+                                    <td>${group.layerCount}</td>
+                                    <td>${group.totalPoints}</td>
+                                    <td>${group.totalPolygons}</td>
+                                    <td>${group.totalAreaFormatted}</td>
+                                    <td><strong>${group.densityFormatted}</strong></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="text-muted" style="margin-top: 0.5rem; font-size: 0.85rem;">
+                    💡 Tip: Use the "Filter by Group" dropdown above to view detailed metrics for a specific group.
+                </p>
             </div>
         `;
     }
