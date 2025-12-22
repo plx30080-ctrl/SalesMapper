@@ -713,11 +713,21 @@ function setupEventListeners() {
         closeAllMenus();
     });
 
-    // Heatmap Button (placeholder for future implementation)
+    // Heatmap Button - connects to heatmap plugin
     const heatmapBtn = document.getElementById('showHeatmapBtn');
     if (heatmapBtn) {
         heatmapBtn.addEventListener('click', () => {
-            toastManager.info('Heatmap feature coming soon!');
+            // Check if heatmap plugin is available
+            if (window.pluginAPI && window.pluginAPI.getPlugin) {
+                const heatmapPlugin = window.pluginAPI.getPlugin('heatmap-overlay');
+                if (heatmapPlugin && heatmapPlugin.showConfigModal) {
+                    heatmapPlugin.showConfigModal();
+                } else {
+                    toastManager.warning('Heatmap plugin not loaded');
+                }
+            } else {
+                toastManager.warning('Plugin system not available');
+            }
             closeAllMenus();
         });
     }
