@@ -946,6 +946,7 @@ class MapManager {
         if (!dataSource || !dataSource.dataLayer) return;
 
         const dataLayer = dataSource.dataLayer;
+        const layer = this.layers.get(layerId);
         let targetFeature = null;
 
         dataLayer.forEach((feature) => {
@@ -955,26 +956,33 @@ class MapManager {
         });
 
         if (targetFeature) {
+            console.log(`Setting color for feature ${featureId} to ${color}`);
+
             // Set color property on the feature
             targetFeature.setProperty('color', color);
 
-            // Force style refresh by re-setting the style function
-            const currentStyle = dataLayer.getStyle();
-            if (typeof currentStyle === 'function') {
-                // Trigger re-render by calling setStyle again
-                dataLayer.setStyle(currentStyle);
+            // For polygon layers, use overrideStyle to apply the color immediately
+            if (layer && layer.type === 'polygon') {
+                const style = this.buildPolygonStyle(color);
+                dataLayer.overrideStyle(targetFeature, style);
             }
 
             // For markers, we need to update the marker icon color
-            const layer = this.layers.get(layerId);
             if (layer && layer.markers) {
-                const marker = layer.markers.find(m => m.feature?.getId() === featureId);
+                const marker = layer.markers.find(m => {
+                    const markerFeatureId = m.feature?.getId();
+                    console.log(`Checking marker with feature ID: ${markerFeatureId} against ${featureId}`);
+                    return markerFeatureId === featureId;
+                });
                 if (marker) {
+                    console.log(`Found matching marker, updating color`);
                     const currentIcon = marker.getIcon();
                     marker.setIcon({
                         ...currentIcon,
                         fillColor: color
                     });
+                } else {
+                    console.log(`No matching marker found for feature ${featureId}`);
                 }
             }
 
@@ -984,6 +992,8 @@ class MapManager {
                 // This will be handled by the cluster refresh mechanism
                 console.log('Note: Clustered marker colors will update on next cluster refresh');
             }
+        } else {
+            console.log(`Feature ${featureId} not found in layer ${layerId}`);
         }
     }
 
@@ -997,6 +1007,7 @@ class MapManager {
         if (!dataSource || !dataSource.dataLayer) return;
 
         const dataLayer = dataSource.dataLayer;
+        const layer = this.layers.get(layerId);
         let targetFeature = null;
 
         dataLayer.forEach((feature) => {
@@ -1009,14 +1020,12 @@ class MapManager {
             // Remove color property
             targetFeature.setProperty('color', null);
 
-            // Force style refresh
-            const currentStyle = dataLayer.getStyle();
-            if (typeof currentStyle === 'function') {
-                dataLayer.setStyle(currentStyle);
+            // For polygon layers, revert to default style
+            if (layer && layer.type === 'polygon') {
+                dataLayer.revertStyle(targetFeature);
             }
 
             // For markers, restore default layer color
-            const layer = this.layers.get(layerId);
             if (layer && layer.markers) {
                 const marker = layer.markers.find(m => m.feature?.getId() === featureId);
                 if (marker) {
@@ -1354,6 +1363,9 @@ class MapManager {
         if (!dataSource || !dataSource.dataLayer) return;
 
         const dataLayer = dataSource.dataLayer;
+        const layerInfo = this.layers.get(layerId);
+
+        // For polygon layers (data layer features)
         dataLayer.forEach((feature) => {
             if (feature.getId() === featureId) {
                 // Store original style and hide
@@ -1361,6 +1373,28 @@ class MapManager {
                 dataLayer.overrideStyle(feature, { visible: false });
             }
         });
+
+        // For point layers (markers)
+        if (layerInfo && layerInfo.markers) {
+            const marker = layerInfo.markers.find(m => m.feature?.getId() === featureId);
+            if (marker) {
+                marker.setMap(null);
+            }
+        }
+
+        // For clustered markers
+        if (layerInfo && layerInfo.clusterer) {
+            // Need to remove marker from clusterer and refresh
+            const markers = layerInfo.markers || [];
+            const marker = markers.find(m => m.feature?.getId() === featureId);
+            if (marker) {
+                marker.setMap(null);
+                // Refresh clusterer
+                if (this.clusterManager) {
+                    this.clusterManager.refreshLayer(layerId);
+                }
+            }
+        }
     }
 
     /**
@@ -1375,6 +1409,7 @@ class MapManager {
         const dataLayer = dataSource.dataLayer;
         const layerInfo = this.layers.get(layerId);
 
+        // For polygon layers (data layer features)
         dataLayer.forEach((feature) => {
             if (feature.getId() === featureId) {
                 // Restore visibility
@@ -1394,6 +1429,23 @@ class MapManager {
                 }
             }
         });
+
+        // For point layers (markers)
+        if (layerInfo && layerInfo.markers) {
+            const marker = layerInfo.markers.find(m => m.feature?.getId() === featureId);
+            if (marker) {
+                // Check if layer is using clustering
+                if (layerInfo.clusterer) {
+                    // Don't set map directly, let clusterer handle it
+                    if (this.clusterManager) {
+                        this.clusterManager.refreshLayer(layerId);
+                    }
+                } else {
+                    // No clustering, set map directly
+                    marker.setMap(this.map);
+                }
+            }
+        }
     }
 
     /**

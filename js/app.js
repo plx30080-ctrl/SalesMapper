@@ -608,6 +608,43 @@ function setupEventListeners() {
     // Layer Group Management
     document.getElementById('addGroupBtn').addEventListener('click', handleAddGroup);
 
+    // Collapse/Expand All Groups
+    let allGroupsCollapsed = false;
+    document.getElementById('collapseAllGroupsBtn').addEventListener('click', () => {
+        const expandedGroups = stateManager.get('expandedGroups') || new Set();
+        const layerGroups = layerManager.getAllLayerGroups();
+
+        if (allGroupsCollapsed) {
+            // Expand all
+            layerGroups.forEach(group => {
+                if (expandedGroups.has) {
+                    expandedGroups.add(group.id);
+                } else {
+                    expandedGroups[group.id] = true;
+                }
+            });
+            stateManager.set('expandedGroups', expandedGroups);
+            document.getElementById('collapseAllGroupsBtn').textContent = '⬆';
+            document.getElementById('collapseAllGroupsBtn').title = 'Collapse all groups';
+            allGroupsCollapsed = false;
+        } else {
+            // Collapse all
+            if (expandedGroups.has) {
+                expandedGroups.clear();
+            } else {
+                layerGroups.forEach(group => {
+                    delete expandedGroups[group.id];
+                });
+            }
+            stateManager.set('expandedGroups', expandedGroups);
+            document.getElementById('collapseAllGroupsBtn').textContent = '⬇';
+            document.getElementById('collapseAllGroupsBtn').title = 'Expand all groups';
+            allGroupsCollapsed = true;
+        }
+
+        updateLayerGroupList();
+    });
+
     // Layer Management
     document.getElementById('addLayerBtn').addEventListener('click', handleAddLayerClick);
 
