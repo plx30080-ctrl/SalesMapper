@@ -537,6 +537,7 @@ function setupEventListeners() {
         closeAllMenus();
     });
     document.getElementById('showDrawToolsBtn').addEventListener('click', () => {
+        updateDrawTargetLayerDropdown();
         modalManager.show('drawToolsModal');
         closeAllMenus();
     });
@@ -1502,13 +1503,28 @@ async function handleAddressSearch() {
  * Start drawing mode
  */
 function startDrawingMode(type) {
+    // Get selected target layer from dropdown
+    const dropdown = document.getElementById('drawTargetLayer');
+    const selectedLayerId = dropdown?.value;
+
+    if (selectedLayerId) {
+        window.targetLayerForNewFeature = selectedLayerId;
+    }
+
     const mode = type === 'point' ? 'draw-point' : 'draw-polygon';
     mapManager.startDrawing(mode);
 
     const statusText = type === 'point' ? 'Click on the map to add a point' : 'Click to draw polygon vertices. Double-click to finish.';
     document.getElementById('drawingStatus').textContent = statusText;
 
-    toastManager.show(`Drawing mode: ${type}. ${statusText}`, 'info');
+    // Get layer name for better message
+    let layerName = 'first available layer';
+    if (selectedLayerId) {
+        const layer = layerManager.getLayer(selectedLayerId);
+        if (layer) layerName = layer.name;
+    }
+
+    toastManager.show(`Drawing ${type} on "${layerName}". ${statusText}`, 'info');
 }
 
 /**
@@ -4325,6 +4341,32 @@ async function initializeProfiles() {
         console.error('Error initializing profiles:', error);
         loadingManager.hide();
         toastManager.error('Error loading workspaces: ' + error.message);
+    }
+}
+
+/**
+ * Update the drawing target layer dropdown
+ */
+function updateDrawTargetLayerDropdown() {
+    const dropdown = document.getElementById('drawTargetLayer');
+    if (!dropdown) return;
+
+    const layers = layerManager.getAllLayers();
+
+    // Clear existing options except the first one
+    dropdown.innerHTML = '<option value="">First available layer (create new if none)</option>';
+
+    // Add each layer as an option
+    layers.forEach(layer => {
+        const option = document.createElement('option');
+        option.value = layer.id;
+        option.textContent = `${layer.name} (${layer.type})`;
+        dropdown.appendChild(option);
+    });
+
+    // If there's only one layer, select it by default
+    if (layers.length === 1) {
+        dropdown.value = layers[0].id;
     }
 }
 

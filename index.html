@@ -446,6 +446,15 @@
                     <span class="close" data-modal="drawToolsModal">&times;</span>
                 </div>
                 <div class="modal-body">
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label for="drawTargetLayer">Add to Layer:</label>
+                        <select id="drawTargetLayer" class="form-select" style="width: 100%;">
+                            <option value="">First available layer</option>
+                        </select>
+                        <small style="display: block; margin-top: 0.25rem; color: #666;">
+                            Select which layer to add new features to
+                        </small>
+                    </div>
                     <div class="drawing-controls">
                         <button id="drawPointBtn" class="btn btn-primary">📍 Draw Point</button>
                         <button id="drawPolygonBtn" class="btn btn-primary">⬟ Draw Polygon</button>
