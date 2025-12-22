@@ -871,6 +871,28 @@ function setupEventListeners() {
         }
     });
 
+    // v3.0: Notification Center Actions
+    document.getElementById('notificationBtn').addEventListener('click', () => {
+        const panel = document.getElementById('notificationPanel');
+        const isVisible = panel.classList.contains('show');
+
+        if (isVisible) {
+            panel.classList.remove('show');
+        } else {
+            panel.classList.add('show');
+            // Render notifications when panel is opened
+            if (notificationCenter) {
+                notificationCenter.render();
+                // Mark notifications as read after viewing
+                notificationCenter.markAllAsRead();
+            }
+        }
+    });
+
+    document.getElementById('closeNotificationPanel').addEventListener('click', () => {
+        document.getElementById('notificationPanel').classList.remove('show');
+    });
+
     // v3.0: Activity Log Actions
     document.getElementById('exportActivityJSONBtn').addEventListener('click', () => {
         if (activityLog) {
