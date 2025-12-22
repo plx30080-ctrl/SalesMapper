@@ -385,6 +385,56 @@ body {
     line-height: 1;
 }
 
+/* Menu Container and Dropdown Menus */
+.quick-actions .menu-container {
+    flex: 1 1 calc(33.333% - 0.35rem);
+    min-width: 0;
+    position: relative;
+}
+
+.dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 0.25rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+    overflow: hidden;
+}
+
+.dropdown-menu .menu-item {
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    font-size: 0.85rem;
+    text-align: left;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: var(--transition);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.dropdown-menu .menu-item:last-child {
+    border-bottom: none;
+}
+
+.dropdown-menu .menu-item:hover {
+    background: var(--primary-light);
+    color: var(--primary-color);
+}
+
+.dropdown-menu .menu-item span {
+    font-size: 1rem;
+}
+
 /* ===== Upload Section ===== */
 .upload-area {
     display: flex;
