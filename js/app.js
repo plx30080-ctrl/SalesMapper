@@ -3474,6 +3474,68 @@ function updateFeatureInfo(properties) {
         return;
     }
 
+    // Add color picker (only if layer has no property-based styling)
+    if (mapManager.selectedFeature) {
+        const layerId = mapManager.selectedFeature.layerId;
+        const layer = layerManager.layers.get(layerId);
+
+        // Only show color picker if layer doesn't have property-based styling
+        if (layer && !layer.styleType) {
+            const colorContainer = document.createElement('div');
+            colorContainer.style.marginTop = '1rem';
+            colorContainer.style.padding = '0.75rem';
+            colorContainer.style.backgroundColor = '#f5f5f5';
+            colorContainer.style.borderRadius = '4px';
+            colorContainer.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                    <label style="font-weight: 500; margin: 0;">Feature Color:</label>
+                    <input type="color" id="featureColorPicker" value="${properties.color || layer.color || '#3388ff'}"
+                           style="width: 50px; height: 30px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer;">
+                    <button id="clearFeatureColor" class="btn btn-secondary" style="font-size: 0.875rem; padding: 0.25rem 0.5rem;">
+                        Reset
+                    </button>
+                </div>
+                <div style="font-size: 0.75rem; color: #666;">
+                    Set a custom color for this feature
+                </div>
+            `;
+            featureInfo.appendChild(colorContainer);
+
+            // Add event listeners
+            const colorPicker = colorContainer.querySelector('#featureColorPicker');
+            const clearBtn = colorContainer.querySelector('#clearFeatureColor');
+
+            colorPicker.addEventListener('change', (e) => {
+                const featureId = mapManager.selectedFeature.feature.getId();
+                mapManager.setFeatureColor(layerId, featureId, e.target.value);
+
+                // Update feature data in layerManager
+                const featureIndex = layer.features.findIndex(f => f.id === featureId);
+                if (featureIndex !== -1) {
+                    layer.features[featureIndex].color = e.target.value;
+                    layerManager.layers.set(layerId, layer);
+                }
+
+                toastManager.success('Feature color updated');
+            });
+
+            clearBtn.addEventListener('click', () => {
+                const featureId = mapManager.selectedFeature.feature.getId();
+                mapManager.clearFeatureColor(layerId, featureId);
+
+                // Remove color from feature data
+                const featureIndex = layer.features.findIndex(f => f.id === featureId);
+                if (featureIndex !== -1) {
+                    delete layer.features[featureIndex].color;
+                    layerManager.layers.set(layerId, layer);
+                }
+
+                colorPicker.value = layer.color || '#3388ff';
+                toastManager.success('Feature color reset to layer default');
+            });
+        }
+    }
+
     // Add button container
     const btnContainer = document.createElement('div');
     btnContainer.style.display = 'flex';
@@ -4221,6 +4283,12 @@ async function switchProfile(profileId, showLoading = true) {
 
         // Re-enable real-time sync for the new profile
         enableRealtimeSync();
+
+        // Emit profile.switched event for activity log
+        eventBus.emit('profile.switched', {
+            profileId: profileId,
+            profileName: profile.name
+        });
 
         if (showLoading) {
             loadingManager.hide();
