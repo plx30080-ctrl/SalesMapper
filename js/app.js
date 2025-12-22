@@ -828,11 +828,24 @@ function setupEventListeners() {
     // Add Layer Modal
     document.getElementById('createBlankLayerBtn').addEventListener('click', () => {
         modalManager.close('addLayerModal');
-        handleCreateBlankLayer();
+        modalManager.show('layerTypeModal');
+        // Clear and focus the name input
+        document.getElementById('newLayerNameInput').value = 'New Layer';
+        setTimeout(() => document.getElementById('newLayerNameInput').select(), 100);
     });
     document.getElementById('uploadDataBtn').addEventListener('click', () => {
         modalManager.close('addLayerModal');
         modalManager.show('uploadModal');
+    });
+
+    // Layer Type Modal
+    document.getElementById('confirmLayerTypeBtn').addEventListener('click', handleCreateBlankLayer);
+    document.getElementById('cancelLayerTypeBtn').addEventListener('click', () => modalManager.close('layerTypeModal'));
+    document.getElementById('newLayerNameInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleCreateBlankLayer();
+        }
     });
 
     // v3.0: Sidebar Tab Switching
@@ -912,14 +925,23 @@ function handleAddLayerClick() {
  * Handle creating a blank layer
  */
 function handleCreateBlankLayer() {
-    const layerName = prompt('Enter layer name:', 'New Layer');
+    // Get values from modal
+    const layerName = document.getElementById('newLayerNameInput').value;
     if (!layerName || layerName.trim() === '') {
+        toastManager.error('Please enter a layer name');
         return;
     }
 
-    // Ask for layer type
-    const isPoint = confirm('Layer type:\n\nOK = Point layer (markers)\nCancel = Polygon layer (shapes)');
-    const layerType = isPoint ? 'point' : 'polygon';
+    // Get selected layer type from radio buttons
+    const selectedType = document.querySelector('input[name="layerType"]:checked');
+    if (!selectedType) {
+        toastManager.error('Please select a layer type');
+        return;
+    }
+    const layerType = selectedType.value;
+
+    // Close modal
+    modalManager.close('layerTypeModal');
 
     // Create empty layer using command pattern for undo/redo
     const command = new CreateLayerCommand(
@@ -2615,9 +2637,23 @@ function createLayerItem(layer) {
     const opacity = layer.opacity !== undefined ? layer.opacity : 1.0;
     const opacityPercent = Math.round(opacity * 100);
 
+    // Determine layer type icon
+    let typeIcon = '';
+    let typeTitle = '';
+    if (layer.type === 'point') {
+        typeIcon = '📍';
+        typeTitle = 'Point layer';
+    } else if (layer.type === 'polygon') {
+        typeIcon = '🗺️';
+        typeTitle = 'Polygon layer';
+    } else if (layer.type === 'mixed') {
+        typeIcon = '📍🗺️';
+        typeTitle = 'Mixed layer (points & polygons)';
+    }
+
     // v3.0: Calculate area for polygon layers
     let areaDisplay = '';
-    if (layer.type === 'polygon' && layer.features.length > 0) {
+    if ((layer.type === 'polygon' || layer.type === 'mixed') && layer.features.length > 0) {
         const totalArea = Utils.calculateTotalArea(layer.features);
         if (totalArea > 0) {
             areaDisplay = `<span class="layer-area" title="Total area">📐 ${Utils.formatArea(totalArea)}</span>`;
@@ -2630,6 +2666,7 @@ function createLayerItem(layer) {
             <button class="layer-expand-btn" title="Expand layer">▶</button>
             <div class="layer-info">
                 <input type="checkbox" class="layer-checkbox" ${layer.visible ? 'checked' : ''}>
+                <span class="layer-type-icon" title="${typeTitle}">${typeIcon}</span>
                 <span class="layer-name" title="${layer.name}">${layer.name}</span>
                 <span class="layer-count">${layer.features.length}</span>
                 ${areaDisplay}

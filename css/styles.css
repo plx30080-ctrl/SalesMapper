@@ -796,6 +796,12 @@ body {
     accent-color: var(--primary-color);
 }
 
+.layer-type-icon {
+    font-size: 0.9rem;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
 .layer-name {
     font-weight: 500;
     flex: 1;
@@ -1705,6 +1711,52 @@ body {
 .form-group textarea {
     resize: vertical;
     min-height: 80px;
+}
+
+.radio-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.875rem;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.radio-option:hover {
+    border-color: var(--primary-color);
+    background: var(--primary-light);
+}
+
+.radio-option input[type="radio"] {
+    margin-top: 0.25rem;
+    cursor: pointer;
+}
+
+.radio-option input[type="radio"]:checked ~ .radio-label {
+    color: var(--primary-color);
+}
+
+.radio-option:has(input[type="radio"]:checked) {
+    border-color: var(--primary-color);
+    background: var(--primary-light);
+}
+
+.radio-label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    flex: 1;
+}
+
+.radio-label strong {
+    font-size: 0.9375rem;
+    color: var(--text-primary);
+}
+
+.radio-label .text-muted {
+    font-size: 0.8125rem;
 }
 
 .modal-actions {
