@@ -77,8 +77,11 @@ class ClusterManager {
                 return null;
             }
 
+            const mapToUse = initiallyVisible ? this.map : null;
+            console.log(`🔧 Creating MarkerClusterer for ${layerId}: initiallyVisible=${initiallyVisible}, map=${mapToUse ? 'SET' : 'NULL'}, markers=${markers.length}`);
+
             const clusterer = new markerClusterer.MarkerClusterer({
-                map: initiallyVisible ? this.map : null,
+                map: mapToUse,
                 markers: markers,
                 renderer: renderer,
                 algorithm: this.createAlgorithm(),
@@ -86,6 +89,10 @@ class ClusterManager {
                     this.handleClusterClick(cluster, layerId);
                 }
             });
+
+            // Verify the clusterer's map after creation
+            const actualMap = clusterer.getMap();
+            console.log(`🔍 Clusterer created - actualMap after init: ${actualMap ? 'HAS MAP (BUG!)' : 'null (correct)'}`);
 
             // Store clusterer
             this.clusterers.set(layerId, {
