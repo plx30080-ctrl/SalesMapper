@@ -16,6 +16,7 @@ class MapManager {
         this.onFeatureClick = null;
         this.drawingManager = null;
         this.isDrawing = false;
+        this.ignoreFeatureClicks = false; // Flag to ignore feature clicks (e.g., when measure tool is active)
         this.onDrawComplete = null;
         this.colorPalette = AppConfig.colors.primary; // Use AppConfig colors
         this.colorIndex = 0;
@@ -448,6 +449,9 @@ class MapManager {
      * @param {boolean} enabled - Whether features should be clickable
      */
     updateLayerClickability(enabled) {
+        // Set flag to ignore feature clicks when disabled
+        this.ignoreFeatureClicks = !enabled;
+
         this.layers.forEach(layer => {
             if ((layer.type === 'polygon' || layer.type === 'mixed') && layer.dataLayer) {
                 // Get the current style (could be a function for data-driven styling)
@@ -789,6 +793,10 @@ class MapManager {
             return; // Ignore feature clicks while drawing
         }
 
+        if (this.ignoreFeatureClicks) {
+            return; // Ignore feature clicks when flag is set (e.g., measure tool is active)
+        }
+
         const feature = event.feature;
         this.selectedFeature = {
             feature: feature,
@@ -883,6 +891,13 @@ class MapManager {
         // Remove markers
         if (layer && layer.markers) {
             layer.markers.forEach(marker => marker.setMap(null));
+        }
+
+        // Remove polygon labels
+        if (this.polygonLabels && this.polygonLabels.has(layerId)) {
+            const labels = this.polygonLabels.get(layerId);
+            labels.forEach(label => label.setMap(null));
+            this.polygonLabels.delete(layerId);
         }
 
         // Remove from storage

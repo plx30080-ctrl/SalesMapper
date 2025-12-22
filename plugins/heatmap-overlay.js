@@ -195,8 +195,8 @@ const HeatmapOverlayPlugin = {
      * Add UI elements to the application
      */
     addUIElements() {
-        // Add heatmap toggle button to quick actions
-        this.addQuickActionButton();
+        // Heatmap button is now in the Plugins dropdown menu in the main UI
+        // No longer adding a quick action button dynamically
 
         // Create configuration modal
         this.createConfigModal();
