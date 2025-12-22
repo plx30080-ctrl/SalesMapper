@@ -990,10 +990,15 @@ class MapManager {
             const layer = this.layers.get(layerId);
             if (!layer) return;
 
+            // Get layer visibility state from layerManager
+            const layerData = layerManager?.layers.get(layerId);
+            const shouldBeVisible = layerData?.visible !== false;
+
             // Bring polygon data layers to the front by detaching and reattaching
             if (layer.dataLayer && (layer.type === 'polygon' || layer.type === 'mixed')) {
+                console.log(`🔧 syncLayerZOrder: ${layerId} dataLayer - visible=${shouldBeVisible}`);
                 layer.dataLayer.setMap(null);
-                layer.dataLayer.setMap(this.map);
+                layer.dataLayer.setMap(shouldBeVisible ? this.map : null);
 
                 // Ensure a consistent z-index for polygon styles without overriding
                 // any existing data-driven styling callbacks.
@@ -1012,17 +1017,19 @@ class MapManager {
             // For point layers, update markers/clusterers to respect order
             if (layer.markers) {
                 const zIndex = index + 1;
+                console.log(`🔧 syncLayerZOrder: ${layerId} markers - visible=${shouldBeVisible}`);
                 layer.markers.forEach(marker => {
                     marker.setZIndex(zIndex);
                     marker.setMap(null);
-                    marker.setMap(this.map);
+                    marker.setMap(shouldBeVisible ? this.map : null);
                 });
             }
 
             if (layer.clusterer) {
-                // Reattach clusterer to force redraw ordering
+                console.log(`🔧 syncLayerZOrder: ${layerId} clusterer - visible=${shouldBeVisible}`);
+                // Reattach clusterer to force redraw ordering, respecting visibility
                 layer.clusterer.setMap(null);
-                layer.clusterer.setMap(this.map);
+                layer.clusterer.setMap(shouldBeVisible ? this.map : null);
             }
         });
     }
