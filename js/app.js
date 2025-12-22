@@ -18,7 +18,7 @@ let notificationCenter; // v3.0 Phase 3: Notification system
 let currentLayerForActions = null;  // Currently selected layer for context menu actions
 let currentCSVData = null;          // Currently loaded CSV data for import workflow
 let realtimeListenerEnabled = false; // Firebase real-time sync status
-let allLayersGroupId = null;         // ID of the default "All Layers" group
+// allLayersGroupId is stored in stateManager.get('allLayersGroupId')
 
 // Data services are initialized in initDataServices()
 // Access via: storageService, firebaseService, dataSyncService
@@ -1142,7 +1142,7 @@ function handleRenameGroup(groupId, currentName) {
     commandHistory.execute(command);
     toastManager.success(`Renamed group to "${newName}"`);
     updateLayerGroupList();
-    saveToFirebase();
+    autoSaveToFirebase();
 }
 
 /**
@@ -1172,7 +1172,7 @@ function handleDeleteGroup(groupId, groupName) {
     toastManager.success(`Deleted group "${groupName}"`);
     updateLayerGroupList();
     updateLayerList(layerManager.getAllLayers());
-    saveToFirebase();
+    autoSaveToFirebase();
 }
 
 /**
@@ -2767,7 +2767,7 @@ function handleRenameLayer() {
     const command = new RenameLayerCommand(layerManager, layerId, newName);
     commandHistory.execute(command);
     toastManager.success(`Layer renamed to "${newName}"`);
-    renderLayerPanel();
+    updateLayerList(layerManager.getAllLayers());
 
     modalManager.close('renameLayerModal');
 }
@@ -2829,7 +2829,7 @@ function handleMoveFeature() {
     if (layerManager.moveFeatureToLayer(sourceLayerId, featureId, targetLayerId)) {
         const featureName = feature?.name || feature?.Name || 'Feature';
         toastManager.success(`"${featureName}" moved to "${targetLayer.name}"`);
-        renderLayerPanel();
+        updateLayerList(layerManager.getAllLayers());
     } else {
         toastManager.error('Failed to move feature');
     }
@@ -3818,27 +3818,31 @@ async function handleLoadFromFirebase() {
             layerManager.importLayers(result.layers);
 
             // Ensure "All Layers" group exists
-            if (!allLayersGroupId || !layerManager.layerGroups.has(stateManager.get('allLayersGroupId'))) {
+            let currentAllLayersGroupId = stateManager.get('allLayersGroupId');
+            if (!currentAllLayersGroupId || !layerManager.layerGroups.has(currentAllLayersGroupId)) {
                 // Try to find existing "All Layers" group by name
-                let foundAllLayersGroup = false;
-                layerManager.getAllLayerGroups().forEach((group, id) => {
+                let foundGroupId = null;
+                layerManager.getAllLayerGroups().forEach(group => {
                     if (group.name === 'All Layers') {
-                        allLayersGroupId = id;
-                        foundAllLayersGroup = true;
+                        foundGroupId = group.id;
                     }
                 });
 
-                // Only create a new one if none exists
-                if (!foundAllLayersGroup) {
-                    allLayersGroupId = createLayerGroup('All Layers');
+                if (foundGroupId) {
+                    // Found existing group, update stateManager
+                    stateManager.set('allLayersGroupId', foundGroupId, true);
+                    currentAllLayersGroupId = foundGroupId;
+                } else {
+                    // Create a new one
+                    currentAllLayersGroupId = createLayerGroup('All Layers');
                 }
             }
 
             // Ensure all layers are in the "All Layers" group
-            const allLayersGroup = layerManager.layerGroups.get(stateManager.get('allLayersGroupId'));
+            const allLayersGroup = layerManager.layerGroups.get(currentAllLayersGroupId);
             if (allLayersGroup) {
                 layerManager.getAllLayers().forEach(layer => {
-                    addLayerToGroup(layer.id, stateManager.get('allLayersGroupId'));
+                    addLayerToGroup(layer.id, currentAllLayersGroupId);
                 });
             }
 
@@ -3911,27 +3915,31 @@ function enableRealtimeSync() {
             layerManager.importLayers(updatedLayers);
 
             // Ensure "All Layers" group exists
-            if (!allLayersGroupId || !layerManager.layerGroups.has(stateManager.get('allLayersGroupId'))) {
+            let currentAllLayersGroupId = stateManager.get('allLayersGroupId');
+            if (!currentAllLayersGroupId || !layerManager.layerGroups.has(currentAllLayersGroupId)) {
                 // Try to find existing "All Layers" group by name
-                let foundAllLayersGroup = false;
-                layerManager.getAllLayerGroups().forEach((group, id) => {
+                let foundGroupId = null;
+                layerManager.getAllLayerGroups().forEach(group => {
                     if (group.name === 'All Layers') {
-                        allLayersGroupId = id;
-                        foundAllLayersGroup = true;
+                        foundGroupId = group.id;
                     }
                 });
 
-                // Only create a new one if none exists
-                if (!foundAllLayersGroup) {
-                    allLayersGroupId = createLayerGroup('All Layers');
+                if (foundGroupId) {
+                    // Found existing group, update stateManager
+                    stateManager.set('allLayersGroupId', foundGroupId, true);
+                    currentAllLayersGroupId = foundGroupId;
+                } else {
+                    // Create a new one
+                    currentAllLayersGroupId = createLayerGroup('All Layers');
                 }
             }
 
             // Ensure all layers are in the "All Layers" group
-            const allLayersGroup = layerManager.layerGroups.get(stateManager.get('allLayersGroupId'));
+            const allLayersGroup = layerManager.layerGroups.get(currentAllLayersGroupId);
             if (allLayersGroup) {
                 layerManager.getAllLayers().forEach(layer => {
-                    addLayerToGroup(layer.id, stateManager.get('allLayersGroupId'));
+                    addLayerToGroup(layer.id, currentAllLayersGroupId);
                 });
             }
 
