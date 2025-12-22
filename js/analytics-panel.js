@@ -76,15 +76,28 @@ class AnalyticsPanel {
 
         return groups.map(group => {
             const groupLayers = allLayers.filter(l => l.groupId === group.id);
-            const pointLayers = groupLayers.filter(l => l.type === 'point');
-            const polygonLayers = groupLayers.filter(l => l.type === 'polygon');
 
-            const totalPoints = pointLayers.reduce((sum, l) => sum + l.features.length, 0);
-            const totalPolygons = polygonLayers.reduce((sum, l) => sum + l.features.length, 0);
+            // Include mixed layers in both point and polygon counts
+            const layersWithPoints = groupLayers.filter(l => l.type === 'point' || l.type === 'mixed');
+            const layersWithPolygons = groupLayers.filter(l => l.type === 'polygon' || l.type === 'mixed');
 
-            // Calculate total area for polygon layers in this group
+            // Count features by type (not by layer type)
+            let totalPoints = 0;
+            let totalPolygons = 0;
+
+            groupLayers.forEach(layer => {
+                layer.features.forEach(feature => {
+                    if (feature.latitude !== undefined && feature.longitude !== undefined) {
+                        totalPoints++;
+                    } else if (feature.wkt) {
+                        totalPolygons++;
+                    }
+                });
+            });
+
+            // Calculate total area for all polygon features in this group
             let totalArea = 0;
-            polygonLayers.forEach(layer => {
+            layersWithPolygons.forEach(layer => {
                 totalArea += Utils.calculateTotalArea(layer.features);
             });
 
@@ -109,16 +122,29 @@ class AnalyticsPanel {
      * Calculate overview metrics
      */
     calculateOverviewMetrics(layers) {
-        const pointLayers = layers.filter(l => l.type === 'point');
-        const polygonLayers = layers.filter(l => l.type === 'polygon');
+        // Include mixed layers when counting points and polygons
+        const layersWithPoints = layers.filter(l => l.type === 'point' || l.type === 'mixed');
+        const layersWithPolygons = layers.filter(l => l.type === 'polygon' || l.type === 'mixed');
 
         const totalFeatures = layers.reduce((sum, l) => sum + l.features.length, 0);
-        const totalPoints = pointLayers.reduce((sum, l) => sum + l.features.length, 0);
-        const totalPolygons = polygonLayers.reduce((sum, l) => sum + l.features.length, 0);
 
-        // Calculate total area for all polygon layers
+        // Count features by type (not by layer type)
+        let totalPoints = 0;
+        let totalPolygons = 0;
+
+        layers.forEach(layer => {
+            layer.features.forEach(feature => {
+                if (feature.latitude !== undefined && feature.longitude !== undefined) {
+                    totalPoints++;
+                } else if (feature.wkt) {
+                    totalPolygons++;
+                }
+            });
+        });
+
+        // Calculate total area for all polygon features
         let totalArea = 0;
-        polygonLayers.forEach(layer => {
+        layersWithPolygons.forEach(layer => {
             totalArea += Utils.calculateTotalArea(layer.features);
         });
 
@@ -157,10 +183,14 @@ class AnalyticsPanel {
             const featureCount = layer.features.length;
             let area = 0;
             let avgArea = 0;
+            let polygonCount = 0;
 
-            if (layer.type === 'polygon') {
+            // Calculate area for polygon and mixed layers
+            if (layer.type === 'polygon' || layer.type === 'mixed') {
                 area = Utils.calculateTotalArea(layer.features);
-                avgArea = featureCount > 0 ? area / featureCount : 0;
+                // Count only polygon features for average calculation
+                polygonCount = layer.features.filter(f => f.wkt).length;
+                avgArea = polygonCount > 0 ? area / polygonCount : 0;
             }
 
             // Calculate property statistics
