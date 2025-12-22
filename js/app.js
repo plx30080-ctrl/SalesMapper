@@ -583,6 +583,28 @@ function setupEventListeners() {
         }
     });
 
+    // Measurement Mode Toggle
+    document.getElementById('distanceModeBtn').addEventListener('click', () => {
+        if (distanceTool) {
+            distanceTool.setMode('distance');
+            document.getElementById('distanceModeBtn').classList.remove('btn-secondary');
+            document.getElementById('distanceModeBtn').classList.add('btn-primary', 'active');
+            document.getElementById('radiusModeBtn').classList.remove('btn-primary', 'active');
+            document.getElementById('radiusModeBtn').classList.add('btn-secondary');
+            toastManager.info('Distance mode: Measure straight-line distance between two points');
+        }
+    });
+    document.getElementById('radiusModeBtn').addEventListener('click', () => {
+        if (distanceTool) {
+            distanceTool.setMode('radius');
+            document.getElementById('radiusModeBtn').classList.remove('btn-secondary');
+            document.getElementById('radiusModeBtn').classList.add('btn-primary', 'active');
+            document.getElementById('distanceModeBtn').classList.remove('btn-primary', 'active');
+            document.getElementById('distanceModeBtn').classList.add('btn-secondary');
+            toastManager.info('Radius mode: Click center then edge to draw a circle');
+        }
+    });
+
     // CSV Upload
     document.getElementById('uploadBtn').addEventListener('click', handleCSVUpload);
     document.getElementById('csvFileInput').addEventListener('change', (e) => {

@@ -9,8 +9,10 @@ class DistanceTool {
         this.mapManager = mapManager;
         this.map = mapManager.map;
         this.isActive = false;
+        this.mode = 'distance'; // 'distance' or 'radius'
         this.markers = [];
         this.line = null;
+        this.circle = null;
         this.measurementListener = null;
         this.measurements = []; // Store all measurements
     }
@@ -81,9 +83,42 @@ class DistanceTool {
     }
 
     /**
+     * Set measurement mode
+     * @param {string} mode - 'distance' or 'radius'
+     */
+    setMode(mode) {
+        if (mode !== 'distance' && mode !== 'radius') {
+            console.error('Invalid mode. Use "distance" or "radius"');
+            return;
+        }
+        this.mode = mode;
+        this.clearCurrent();
+        this.updateInstructions();
+    }
+
+    /**
+     * Update instructions based on current mode
+     */
+    updateInstructions() {
+        const instructions = document.getElementById('measurementInstructions');
+        if (!instructions) return;
+
+        const text = instructions.querySelector('.instructions-text');
+        if (!text) return;
+
+        if (this.mode === 'radius') {
+            text.textContent = 'Click center point, then click to set radius';
+        } else {
+            text.textContent = 'Click two points on the map to measure distance';
+        }
+    }
+
+    /**
      * Add a measurement point
      */
     addMeasurementPoint(latLng) {
+        const iconColor = this.mode === 'radius' ? '#2196F3' : '#FF5722';
+
         // Create marker
         const marker = new google.maps.Marker({
             position: latLng,
@@ -91,27 +126,37 @@ class DistanceTool {
             draggable: true,
             icon: {
                 path: google.maps.SymbolPath.CIRCLE,
-                scale: 8,
-                fillColor: '#FF5722',
+                scale: this.markers.length === 0 && this.mode === 'radius' ? 10 : 8,
+                fillColor: iconColor,
                 fillOpacity: 1,
                 strokeColor: '#FFFFFF',
                 strokeWeight: 2
             },
-            title: 'Measurement Point'
+            title: this.mode === 'radius' && this.markers.length === 0 ? 'Center Point' : 'Measurement Point'
         });
 
-        // Add drag listener to update line
+        // Add drag listener to update visualization
         marker.addListener('drag', () => {
-            this.updateLine();
-            this.updateDistance();
+            if (this.mode === 'radius') {
+                this.updateCircle();
+                this.updateRadius();
+            } else {
+                this.updateLine();
+                this.updateDistance();
+            }
         });
 
         this.markers.push(marker);
 
-        // If we have 2 points, draw line and calculate distance
+        // Handle second point based on mode
         if (this.markers.length === 2) {
-            this.drawLine();
-            this.calculateDistance();
+            if (this.mode === 'radius') {
+                this.drawCircle();
+                this.calculateRadius();
+            } else {
+                this.drawLine();
+                this.calculateDistance();
+            }
             this.saveMeasurement();
 
             // Auto-start new measurement
@@ -254,24 +299,182 @@ class DistanceTool {
     }
 
     /**
+     * Draw circle for radius measurement
+     */
+    drawCircle() {
+        if (this.markers.length < 2) return;
+
+        const center = this.markers[0].getPosition();
+        const edge = this.markers[1].getPosition();
+
+        // Calculate radius in meters
+        const radiusMeters = google.maps.geometry.spherical.computeDistanceBetween(center, edge);
+
+        this.circle = new google.maps.Circle({
+            strokeColor: '#2196F3',
+            strokeOpacity: 0.8,
+            strokeWeight: 2,
+            fillColor: '#2196F3',
+            fillOpacity: 0.15,
+            map: this.map,
+            center: center,
+            radius: radiusMeters
+        });
+    }
+
+    /**
+     * Update circle position
+     */
+    updateCircle() {
+        if (!this.circle || this.markers.length < 2) return;
+
+        const center = this.markers[0].getPosition();
+        const edge = this.markers[1].getPosition();
+
+        const radiusMeters = google.maps.geometry.spherical.computeDistanceBetween(center, edge);
+
+        this.circle.setCenter(center);
+        this.circle.setRadius(radiusMeters);
+    }
+
+    /**
+     * Calculate and display radius
+     */
+    calculateRadius() {
+        if (this.markers.length < 2) return;
+
+        const center = this.markers[0].getPosition();
+        const edge = this.markers[1].getPosition();
+
+        // Calculate radius using Google Maps Geometry library
+        const radiusMeters = google.maps.geometry.spherical.computeDistanceBetween(center, edge);
+
+        // Convert to miles and kilometers
+        const radiusMiles = radiusMeters / 1609.34;
+        const radiusKm = radiusMeters / 1000;
+        const diameterMiles = radiusMiles * 2;
+        const diameterKm = radiusKm * 2;
+
+        // Format for display
+        const radiusText = this.formatDistance(radiusMiles, radiusKm);
+        const diameterText = this.formatDistance(diameterMiles, diameterKm);
+
+        // Show in info window
+        this.showRadiusInfo(center, radiusText, diameterText, radiusMiles, radiusKm);
+
+        return { meters: radiusMeters, miles: radiusMiles, km: radiusKm };
+    }
+
+    /**
+     * Update radius (for dragging)
+     */
+    updateRadius() {
+        if (this.markers.length === 2 && this.circle) {
+            const center = this.markers[0].getPosition();
+            const radius = this.calculateRadius();
+            if (radius) {
+                const radiusText = this.formatDistance(radius.miles, radius.km);
+                const diameterText = this.formatDistance(radius.miles * 2, radius.km * 2);
+                this.showRadiusInfo(center, radiusText, diameterText, radius.miles, radius.km);
+            }
+        }
+    }
+
+    /**
+     * Show radius and diameter in info window
+     */
+    showRadiusInfo(position, radiusText, diameterText, radiusMiles, radiusKm) {
+        // Close existing info window
+        if (this.infoWindow) {
+            this.infoWindow.close();
+        }
+
+        const content = `
+            <div style="padding: 10px; min-width: 250px;">
+                <div style="font-size: 16px; font-weight: bold; color: #2196F3; margin-bottom: 8px;">
+                    📏 Radius Circle
+                </div>
+                <div style="margin-bottom: 8px;">
+                    <div style="font-size: 14px; margin-bottom: 4px;">
+                        <strong>Radius:</strong> ${radiusText}
+                    </div>
+                    <div style="font-size: 14px;">
+                        <strong>Diameter:</strong> ${diameterText}
+                    </div>
+                </div>
+                <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
+                    Click "Save" to keep this measurement
+                </div>
+                <button onclick="window.distanceTool.saveMeasurement()"
+                        style="background: #0078d4; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 8px;">
+                    Save
+                </button>
+                <button onclick="window.distanceTool.clearCurrent()"
+                        style="background: #d13438; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">
+                    Clear
+                </button>
+            </div>
+        `;
+
+        this.infoWindow = new google.maps.InfoWindow({
+            content: content,
+            position: position
+        });
+
+        this.infoWindow.open(this.map);
+
+        // Store for access from buttons
+        window.distanceTool = this;
+    }
+
+    /**
      * Save current measurement
      */
     saveMeasurement() {
         if (this.markers.length === 2) {
-            const distance = this.calculateDistance();
-            const measurement = {
-                id: Utils.generateId('measurement'),
-                point1: {
-                    lat: this.markers[0].getPosition().lat(),
-                    lng: this.markers[0].getPosition().lng()
-                },
-                point2: {
-                    lat: this.markers[1].getPosition().lat(),
-                    lng: this.markers[1].getPosition().lng()
-                },
-                distance: distance,
-                timestamp: new Date().toISOString()
-            };
+            let measurement;
+            let successMessage;
+
+            if (this.mode === 'radius') {
+                const radius = this.calculateRadius();
+                measurement = {
+                    id: Utils.generateId('measurement'),
+                    type: 'radius',
+                    center: {
+                        lat: this.markers[0].getPosition().lat(),
+                        lng: this.markers[0].getPosition().lng()
+                    },
+                    edge: {
+                        lat: this.markers[1].getPosition().lat(),
+                        lng: this.markers[1].getPosition().lng()
+                    },
+                    radius: radius,
+                    diameter: {
+                        meters: radius.meters * 2,
+                        miles: radius.miles * 2,
+                        km: radius.km * 2
+                    },
+                    timestamp: new Date().toISOString()
+                };
+                successMessage = `Radius measurement saved: ${this.formatDistance(radius.miles, radius.km)}`;
+            } else {
+                const distance = this.calculateDistance();
+                measurement = {
+                    id: Utils.generateId('measurement'),
+                    type: 'distance',
+                    point1: {
+                        lat: this.markers[0].getPosition().lat(),
+                        lng: this.markers[0].getPosition().lng()
+                    },
+                    point2: {
+                        lat: this.markers[1].getPosition().lat(),
+                        lng: this.markers[1].getPosition().lng()
+                    },
+                    distance: distance,
+                    timestamp: new Date().toISOString()
+                };
+                successMessage = `Measurement saved: ${this.formatDistance(distance.miles, distance.km)}`;
+            }
 
             this.measurements.push(measurement);
 
@@ -282,7 +485,7 @@ class DistanceTool {
 
             // Show toast
             if (window.toastManager) {
-                toastManager.success(`Measurement saved: ${this.formatDistance(distance.miles, distance.km)}`);
+                toastManager.success(successMessage);
             }
 
             console.log('Measurement saved:', measurement);
@@ -303,6 +506,12 @@ class DistanceTool {
         if (this.line) {
             this.line.setMap(null);
             this.line = null;
+        }
+
+        // Remove circle
+        if (this.circle) {
+            this.circle.setMap(null);
+            this.circle = null;
         }
 
         // Close info window
@@ -352,6 +561,7 @@ class DistanceTool {
         const instructions = document.getElementById('measurementInstructions');
         if (instructions) {
             instructions.style.display = 'block';
+            this.updateInstructions();
         }
     }
 

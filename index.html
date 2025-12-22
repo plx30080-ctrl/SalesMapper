@@ -218,8 +218,12 @@
                     <div class="instructions-content">
                         <span class="instructions-icon">📏</span>
                         <span class="instructions-text">Click two points on the map to measure distance</span>
-                        <button id="clearMeasurementBtn" class="btn btn-secondary btn-small">Clear</button>
-                        <button id="closeMeasurementBtn" class="btn btn-secondary btn-small">✕</button>
+                        <div style="display: flex; gap: 0.25rem; margin-left: auto;">
+                            <button id="distanceModeBtn" class="btn btn-primary btn-small active" title="Distance Mode">↔️</button>
+                            <button id="radiusModeBtn" class="btn btn-secondary btn-small" title="Radius Mode">⭕</button>
+                            <button id="clearMeasurementBtn" class="btn btn-secondary btn-small">Clear</button>
+                            <button id="closeMeasurementBtn" class="btn btn-secondary btn-small">✕</button>
+                        </div>
                     </div>
                 </div>
 
