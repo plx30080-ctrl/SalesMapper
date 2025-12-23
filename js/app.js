@@ -237,6 +237,9 @@ async function initializeApp() {
         // Setup EventBus subscriptions (replaces old callbacks)
         setupEventBusSubscriptions();
 
+        // Initialize undo/redo button states
+        updateHistoryButtons();
+
         // Setup map click handler for clearing selection
         setupMapClickHandler();
 
