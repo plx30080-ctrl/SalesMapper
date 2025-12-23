@@ -315,6 +315,8 @@ class AnalyticsPanel {
      */
     calculatePointsInPolygons(layers) {
         console.log('🔍 calculatePointsInPolygons: start');
+        console.log('   mapManager available?', !!window.mapManager);
+        console.log('   mapManager.parseWKT available?', !!(window.mapManager && typeof window.mapManager.parseWKT === 'function'));
 
         // Get all polygon features and all point features
         const polygonLayers = layers.filter(l => l.type === 'polygon' || l.type === 'mixed');
@@ -322,6 +324,17 @@ class AnalyticsPanel {
 
         console.log('   Polygon layers:', polygonLayers.length, polygonLayers.map(l => l.name));
         console.log('   Point layers:', pointLayers.length, pointLayers.map(l => l.name));
+
+        // Check if first polygon feature has geometry
+        if (polygonLayers.length > 0 && polygonLayers[0].features.length > 0) {
+            const sampleFeature = polygonLayers[0].features[0];
+            console.log('   Sample polygon feature:', {
+                id: sampleFeature.id,
+                hasGeometry: !!sampleFeature.geometry,
+                hasWkt: !!sampleFeature.wkt,
+                wktSample: sampleFeature.wkt ? sampleFeature.wkt.substring(0, 50) : null
+            });
+        }
 
         const pointsInPolygons = new Map();
 
@@ -354,8 +367,12 @@ class AnalyticsPanel {
 
                 // Parse WKT to get polygon coordinates
                 const geometry = feature.geometry || this.parseFeatureGeometry(feature);
-                if (!geometry || !geometry.coordinates) {
-                    console.log('   ⚠️ Failed to parse geometry for:', feature.id, feature.name);
+                if (!geometry) {
+                    console.log('   ⚠️ Geometry is null for:', feature.id, feature.name);
+                    return;
+                }
+                if (!geometry.coordinates) {
+                    console.log('   ⚠️ Geometry missing coordinates for:', feature.id, feature.name, 'geometry:', geometry);
                     return;
                 }
 
@@ -415,11 +432,21 @@ class AnalyticsPanel {
     parseFeatureGeometry(feature) {
         if (feature.geometry) return feature.geometry;
 
-        // If we have a mapManager reference, use its WKT parser
-        if (window.mapManager && feature.wkt) {
-            return window.mapManager.parseWKT(feature.wkt);
+        // If we don't have wkt, can't parse
+        if (!feature.wkt) return null;
+
+        // Try to access mapManager from window (global)
+        const mapManager = window.mapManager;
+        if (mapManager && typeof mapManager.parseWKT === 'function') {
+            try {
+                return mapManager.parseWKT(feature.wkt);
+            } catch (err) {
+                console.error('Error parsing WKT:', err, feature.wkt);
+                return null;
+            }
         }
 
+        console.warn('mapManager.parseWKT not available, cannot parse WKT');
         return null;
     }
 
