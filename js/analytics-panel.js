@@ -367,8 +367,12 @@ class AnalyticsPanel {
 
                 // Parse WKT to get polygon coordinates
                 const geometry = feature.geometry || this.parseFeatureGeometry(feature);
-                if (!geometry || !geometry.coordinates) {
-                    console.log('   ⚠️ Failed to parse geometry for:', feature.id, feature.name);
+                if (!geometry) {
+                    console.log('   ⚠️ Geometry is null for:', feature.id, feature.name);
+                    return;
+                }
+                if (!geometry.coordinates) {
+                    console.log('   ⚠️ Geometry missing coordinates for:', feature.id, feature.name, 'geometry:', geometry);
                     return;
                 }
 
