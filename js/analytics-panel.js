@@ -101,14 +101,21 @@ class AnalyticsPanel {
                 totalArea += Utils.calculateTotalArea(layer.features);
             });
 
-            // Calculate density (points per square mile)
-            const density = totalArea > 0 ? (totalPoints / (totalArea / 2589988.11)) : 0;
+            // Calculate point-in-polygon coverage for this group
+            const pointsInPolygons = this.calculatePointsInPolygons(groupLayers);
+            const territories = Array.from(pointsInPolygons.values());
+            const pointsCovered = territories.reduce((sum, t) => sum + t.points.length, 0);
+
+            // Calculate density using actual points within territories
+            // If no territories, fall back to simple division
+            const density = totalArea > 0 ? (pointsCovered / (totalArea / 2589988.11)) : 0;
 
             return {
                 id: group.id,
                 name: group.name,
                 layerCount: groupLayers.length,
                 totalPoints: totalPoints,
+                pointsCovered: pointsCovered,
                 totalPolygons: totalPolygons,
                 totalArea: totalArea,
                 totalAreaFormatted: Utils.formatArea(totalArea),
@@ -148,8 +155,13 @@ class AnalyticsPanel {
             totalArea += Utils.calculateTotalArea(layer.features);
         });
 
-        // Calculate density (points per square mile)
-        const density = totalArea > 0 ? (totalPoints / (totalArea / 2589988.11)) : 0;
+        // Calculate point-in-polygon coverage
+        const pointsInPolygons = this.calculatePointsInPolygons(layers);
+        const territories = Array.from(pointsInPolygons.values());
+        const pointsCovered = territories.reduce((sum, t) => sum + t.points.length, 0);
+
+        // Calculate density using actual points within territories
+        const density = totalArea > 0 ? (pointsCovered / (totalArea / 2589988.11)) : 0;
 
         // Get all unique properties across all features
         const allProperties = new Set();
@@ -165,6 +177,7 @@ class AnalyticsPanel {
             totalLayers: layers.length,
             totalFeatures: totalFeatures,
             totalPoints: totalPoints,
+            pointsCovered: pointsCovered,
             totalPolygons: totalPolygons,
             totalArea: totalArea,
             totalAreaFormatted: Utils.formatArea(totalArea),
@@ -285,61 +298,199 @@ class AnalyticsPanel {
     }
 
     /**
+     * Calculate which points fall within which polygon territories
+     * @param {Array} layers - All layers
+     * @returns {Map} Map of polygon feature ID to array of points within it
+     */
+    calculatePointsInPolygons(layers) {
+        // Get all polygon features and all point features
+        const polygonLayers = layers.filter(l => l.type === 'polygon' || l.type === 'mixed');
+        const pointLayers = layers.filter(l => l.type === 'point' || l.type === 'mixed');
+
+        const pointsInPolygons = new Map();
+
+        // Collect all point features with their coordinates
+        const allPoints = [];
+        pointLayers.forEach(layer => {
+            layer.features.forEach(feature => {
+                if (feature.latitude !== undefined && feature.longitude !== undefined) {
+                    allPoints.push({
+                        lat: parseFloat(feature.latitude),
+                        lng: parseFloat(feature.longitude),
+                        feature: feature,
+                        layerName: layer.name
+                    });
+                }
+            });
+        });
+
+        // For each polygon, check which points fall within it
+        polygonLayers.forEach(layer => {
+            layer.features.forEach(feature => {
+                // Skip if not a polygon feature
+                if (!feature.wkt) return;
+
+                // Parse WKT to get polygon coordinates
+                const geometry = feature.geometry || this.parseFeatureGeometry(feature);
+                if (!geometry || !geometry.coordinates) return;
+
+                const polygonCoords = geometry.coordinates[0];
+                if (!polygonCoords || polygonCoords.length < 3) return;
+
+                // Convert to Google Maps Polygon for containment checking
+                const polygonPath = polygonCoords.map(coord => ({
+                    lat: coord[1],
+                    lng: coord[0]
+                }));
+
+                // Create a Google Maps Polygon object
+                const polygon = new google.maps.Polygon({ paths: polygonPath });
+
+                // Check each point
+                const pointsInThisPolygon = [];
+                allPoints.forEach(point => {
+                    const latLng = new google.maps.LatLng(point.lat, point.lng);
+                    if (google.maps.geometry.poly.containsLocation(latLng, polygon)) {
+                        pointsInThisPolygon.push(point);
+                    }
+                });
+
+                // Store results
+                const featureKey = `${layer.id}_${feature.id}`;
+                pointsInPolygons.set(featureKey, {
+                    polygonFeature: feature,
+                    layerName: layer.name,
+                    points: pointsInThisPolygon,
+                    area: Utils.calculatePolygonArea(feature),
+                    density: 0
+                });
+
+                // Calculate density
+                const data = pointsInPolygons.get(featureKey);
+                if (data.area > 0) {
+                    data.density = (data.points.length / (data.area / 2589988.11)); // points per sq mi
+                }
+            });
+        });
+
+        return pointsInPolygons;
+    }
+
+    /**
+     * Parse feature geometry from WKT if needed
+     */
+    parseFeatureGeometry(feature) {
+        if (feature.geometry) return feature.geometry;
+
+        // If we have a mapManager reference, use its WKT parser
+        if (window.mapManager && feature.wkt) {
+            return window.mapManager.parseWKT(feature.wkt);
+        }
+
+        return null;
+    }
+
+    /**
      * Calculate coverage metrics
      */
     calculateCoverageMetrics(layers) {
-        const polygonLayers = layers.filter(l => l.type === 'polygon');
+        const polygonLayers = layers.filter(l => l.type === 'polygon' || l.type === 'mixed');
+
+        // Calculate point-in-polygon coverage
+        const pointsInPolygons = this.calculatePointsInPolygons(layers);
+
+        // Convert to array for easier processing
+        const territories = Array.from(pointsInPolygons.values());
 
         // Calculate coverage efficiency
         const metrics = {
-            territoryCount: polygonLayers.reduce((sum, l) => sum + l.features.length, 0),
+            territoryCount: territories.length,
             avgTerritorySize: 0,
             smallestTerritory: null,
             largestTerritory: null,
-            sizeVariance: 0
+            sizeVariance: 0,
+            territories: territories,
+            totalPointsCovered: territories.reduce((sum, t) => sum + t.points.length, 0),
+            avgDensity: 0
         };
 
-        if (polygonLayers.length > 0) {
-            const areas = [];
+        if (territories.length > 0) {
+            const areas = territories.map(t => t.area);
+            const densities = territories.map(t => t.density);
             let smallestArea = Infinity;
             let largestArea = 0;
             let smallestInfo = null;
             let largestInfo = null;
+            let highestDensity = 0;
+            let lowestDensity = Infinity;
+            let highestDensityTerritory = null;
+            let lowestDensityTerritory = null;
 
-            polygonLayers.forEach(layer => {
-                layer.features.forEach(feature => {
-                    const area = Utils.calculatePolygonArea(feature);
-                    if (area > 0) {
-                        areas.push(area);
+            territories.forEach(territory => {
+                const area = territory.area;
+                const density = territory.density;
+                const feature = territory.polygonFeature;
 
-                        if (area < smallestArea) {
-                            smallestArea = area;
-                            smallestInfo = {
-                                layerName: layer.name,
-                                featureName: feature.properties?.name || 'Unnamed',
-                                area: area,
-                                areaFormatted: Utils.formatArea(area)
-                            };
-                        }
-
-                        if (area > largestArea) {
-                            largestArea = area;
-                            largestInfo = {
-                                layerName: layer.name,
-                                featureName: feature.properties?.name || 'Unnamed',
-                                area: area,
-                                areaFormatted: Utils.formatArea(area)
-                            };
-                        }
+                if (area > 0) {
+                    if (area < smallestArea) {
+                        smallestArea = area;
+                        smallestInfo = {
+                            layerName: territory.layerName,
+                            featureName: feature.name || feature.properties?.name || 'Unnamed',
+                            area: area,
+                            areaFormatted: Utils.formatArea(area),
+                            pointCount: territory.points.length,
+                            density: density.toFixed(2)
+                        };
                     }
-                });
+
+                    if (area > largestArea) {
+                        largestArea = area;
+                        largestInfo = {
+                            layerName: territory.layerName,
+                            featureName: feature.name || feature.properties?.name || 'Unnamed',
+                            area: area,
+                            areaFormatted: Utils.formatArea(area),
+                            pointCount: territory.points.length,
+                            density: density.toFixed(2)
+                        };
+                    }
+
+                    if (density > highestDensity) {
+                        highestDensity = density;
+                        highestDensityTerritory = {
+                            layerName: territory.layerName,
+                            featureName: feature.name || feature.properties?.name || 'Unnamed',
+                            pointCount: territory.points.length,
+                            area: area,
+                            areaFormatted: Utils.formatArea(area),
+                            density: density.toFixed(2)
+                        };
+                    }
+
+                    if (density < lowestDensity && density > 0) {
+                        lowestDensity = density;
+                        lowestDensityTerritory = {
+                            layerName: territory.layerName,
+                            featureName: feature.name || feature.properties?.name || 'Unnamed',
+                            pointCount: territory.points.length,
+                            area: area,
+                            areaFormatted: Utils.formatArea(area),
+                            density: density.toFixed(2)
+                        };
+                    }
+                }
             });
 
             if (areas.length > 0) {
                 metrics.avgTerritorySize = areas.reduce((sum, a) => sum + a, 0) / areas.length;
                 metrics.avgTerritorySizeFormatted = Utils.formatArea(metrics.avgTerritorySize);
+                metrics.avgDensity = densities.reduce((sum, d) => sum + d, 0) / densities.length;
+                metrics.avgDensityFormatted = metrics.avgDensity.toFixed(2);
                 metrics.smallestTerritory = smallestInfo;
                 metrics.largestTerritory = largestInfo;
+                metrics.highestDensityTerritory = highestDensityTerritory;
+                metrics.lowestDensityTerritory = lowestDensityTerritory;
 
                 // Calculate variance (measure of territory size consistency)
                 const mean = metrics.avgTerritorySize;
@@ -704,23 +855,50 @@ class AnalyticsPanel {
                         <div class="metric-label">Total Territories</div>
                     </div>
                     <div class="metric-card">
+                        <div class="metric-value">${metrics.totalPointsCovered || 0}</div>
+                        <div class="metric-label">Points in Territories</div>
+                    </div>
+                    <div class="metric-card">
                         <div class="metric-value">${metrics.avgTerritorySizeFormatted || 'N/A'}</div>
                         <div class="metric-label">Avg Territory Size</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">${metrics.avgDensityFormatted || '0.00'}</div>
+                        <div class="metric-label">Avg Density (pts/sq mi)</div>
                     </div>
                 </div>
 
                 ${metrics.smallestTerritory ? `
                     <div class="coverage-details">
+                        <h4 style="margin-top: 1rem; margin-bottom: 0.5rem;">📏 Territory Size</h4>
                         <div class="coverage-item">
-                            <strong>Smallest Territory:</strong>
+                            <strong>Smallest:</strong>
                             ${metrics.smallestTerritory.featureName} (${metrics.smallestTerritory.layerName})
-                            <span class="coverage-value">${metrics.smallestTerritory.areaFormatted}</span>
+                            <span class="coverage-value">${metrics.smallestTerritory.areaFormatted} - ${metrics.smallestTerritory.pointCount} pts (${metrics.smallestTerritory.density} pts/sq mi)</span>
                         </div>
                         <div class="coverage-item">
-                            <strong>Largest Territory:</strong>
+                            <strong>Largest:</strong>
                             ${metrics.largestTerritory.featureName} (${metrics.largestTerritory.layerName})
-                            <span class="coverage-value">${metrics.largestTerritory.areaFormatted}</span>
+                            <span class="coverage-value">${metrics.largestTerritory.areaFormatted} - ${metrics.largestTerritory.pointCount} pts (${metrics.largestTerritory.density} pts/sq mi)</span>
                         </div>
+                    </div>
+                ` : ''}
+
+                ${metrics.highestDensityTerritory ? `
+                    <div class="coverage-details">
+                        <h4 style="margin-top: 1rem; margin-bottom: 0.5rem;">📊 Territory Density</h4>
+                        <div class="coverage-item">
+                            <strong>Highest Density:</strong>
+                            ${metrics.highestDensityTerritory.featureName} (${metrics.highestDensityTerritory.layerName})
+                            <span class="coverage-value">${metrics.highestDensityTerritory.pointCount} pts in ${metrics.highestDensityTerritory.areaFormatted} = <strong>${metrics.highestDensityTerritory.density} pts/sq mi</strong></span>
+                        </div>
+                        ${metrics.lowestDensityTerritory ? `
+                            <div class="coverage-item">
+                                <strong>Lowest Density:</strong>
+                                ${metrics.lowestDensityTerritory.featureName} (${metrics.lowestDensityTerritory.layerName})
+                                <span class="coverage-value">${metrics.lowestDensityTerritory.pointCount} pts in ${metrics.lowestDensityTerritory.areaFormatted} = <strong>${metrics.lowestDensityTerritory.density} pts/sq mi</strong></span>
+                            </div>
+                        ` : ''}
                     </div>
                 ` : ''}
             </div>
