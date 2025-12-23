@@ -30,9 +30,14 @@ class AnalyticsPanel {
     calculateMetrics(groupId = null) {
         let layers = this.layerManager.getAllLayers();
 
+        console.log('📊 Analytics: calculateMetrics called');
+        console.log('   Total layers:', layers.length);
+        console.log('   Layers:', layers.map(l => ({ name: l.name, type: l.type, features: l.features.length })));
+
         // Filter by group if specified
         if (groupId) {
             layers = layers.filter(l => l.groupId === groupId);
+            console.log('   Filtered to group', groupId, '- layers:', layers.length);
         }
 
         const metrics = {
@@ -42,6 +47,12 @@ class AnalyticsPanel {
             coverage: this.calculateCoverageMetrics(layers),
             groups: this.calculateGroupMetrics()
         };
+
+        console.log('   Calculated metrics:', {
+            overview: metrics.overview,
+            coverageTerritories: metrics.coverage.territoryCount,
+            groups: metrics.groups.length
+        });
 
         return metrics;
     }
@@ -303,9 +314,14 @@ class AnalyticsPanel {
      * @returns {Map} Map of polygon feature ID to array of points within it
      */
     calculatePointsInPolygons(layers) {
+        console.log('🔍 calculatePointsInPolygons: start');
+
         // Get all polygon features and all point features
         const polygonLayers = layers.filter(l => l.type === 'polygon' || l.type === 'mixed');
         const pointLayers = layers.filter(l => l.type === 'point' || l.type === 'mixed');
+
+        console.log('   Polygon layers:', polygonLayers.length, polygonLayers.map(l => l.name));
+        console.log('   Point layers:', pointLayers.length, pointLayers.map(l => l.name));
 
         const pointsInPolygons = new Map();
 
@@ -324,18 +340,32 @@ class AnalyticsPanel {
             });
         });
 
+        console.log('   Total points collected:', allPoints.length);
+
         // For each polygon, check which points fall within it
+        let polygonCount = 0;
         polygonLayers.forEach(layer => {
             layer.features.forEach(feature => {
                 // Skip if not a polygon feature
-                if (!feature.wkt) return;
+                if (!feature.wkt) {
+                    console.log('   ⚠️ Feature missing wkt:', feature.id, feature.name);
+                    return;
+                }
 
                 // Parse WKT to get polygon coordinates
                 const geometry = feature.geometry || this.parseFeatureGeometry(feature);
-                if (!geometry || !geometry.coordinates) return;
+                if (!geometry || !geometry.coordinates) {
+                    console.log('   ⚠️ Failed to parse geometry for:', feature.id, feature.name);
+                    return;
+                }
 
                 const polygonCoords = geometry.coordinates[0];
-                if (!polygonCoords || polygonCoords.length < 3) return;
+                if (!polygonCoords || polygonCoords.length < 3) {
+                    console.log('   ⚠️ Invalid polygon coords for:', feature.id, feature.name);
+                    return;
+                }
+
+                polygonCount++;
 
                 // Convert to Google Maps Polygon for containment checking
                 const polygonPath = polygonCoords.map(coord => ({
@@ -372,6 +402,9 @@ class AnalyticsPanel {
                 }
             });
         });
+
+        console.log('   Processed polygons:', polygonCount);
+        console.log('   Total territories in map:', pointsInPolygons.size);
 
         return pointsInPolygons;
     }
