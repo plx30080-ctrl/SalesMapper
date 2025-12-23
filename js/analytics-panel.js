@@ -315,8 +315,8 @@ class AnalyticsPanel {
      */
     calculatePointsInPolygons(layers) {
         console.log('🔍 calculatePointsInPolygons: start');
-        console.log('   mapManager available?', !!window.mapManager);
-        console.log('   mapManager.parseWKT available?', !!(window.mapManager && typeof window.mapManager.parseWKT === 'function'));
+        console.log('   wellknown library available?', typeof wellknown !== 'undefined');
+        console.log('   google.maps.geometry available?', !!(google && google.maps && google.maps.geometry));
 
         // Get all polygon features and all point features
         const polygonLayers = layers.filter(l => l.type === 'polygon' || l.type === 'mixed');
@@ -435,18 +435,18 @@ class AnalyticsPanel {
         // If we don't have wkt, can't parse
         if (!feature.wkt) return null;
 
-        // Try to access mapManager from window (global)
-        const mapManager = window.mapManager;
-        if (mapManager && typeof mapManager.parseWKT === 'function') {
+        // Use wellknown library directly (same as mapManager does)
+        if (typeof wellknown !== 'undefined') {
             try {
-                return mapManager.parseWKT(feature.wkt);
+                const geoJson = wellknown.parse(feature.wkt);
+                return geoJson;
             } catch (err) {
-                console.error('Error parsing WKT:', err, feature.wkt);
+                console.error('Error parsing WKT with wellknown:', err, feature.wkt.substring(0, 50));
                 return null;
             }
         }
 
-        console.warn('mapManager.parseWKT not available, cannot parse WKT');
+        console.error('wellknown library not available');
         return null;
     }
 
