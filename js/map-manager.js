@@ -419,10 +419,19 @@ class MapManager {
         // Store layer reference
         // For mixed layers, merge with existing point layer config
         const existingLayerConfig = this.layers.get(layerId);
+
+        // Determine layer type: preserve 'mixed', upgrade point->mixed, otherwise polygon
+        let layerType = 'polygon';
+        if (existingLayerConfig?.type === 'mixed') {
+            layerType = 'mixed'; // Already mixed, keep it
+        } else if (existingLayerConfig?.type === 'point') {
+            layerType = 'mixed'; // Upgrade point to mixed
+        }
+
         this.layers.set(layerId, {
             ...(existingLayerConfig || {}), // Preserve existing config (e.g., markers, clusterer)
             dataLayer: dataLayer,
-            type: existingLayerConfig?.type === 'point' ? 'mixed' : 'polygon', // Upgrade to mixed if was point
+            type: layerType,
             color: color
         });
 
@@ -640,12 +649,21 @@ class MapManager {
         // Store layer reference
         // For mixed layers, merge with existing polygon layer config
         const existingLayerConfig = this.layers.get(layerId);
+
+        // Determine layer type: preserve 'mixed', upgrade polygon->mixed, otherwise point
+        let layerType = 'point';
+        if (existingLayerConfig?.type === 'mixed') {
+            layerType = 'mixed'; // Already mixed, keep it
+        } else if (existingLayerConfig?.type === 'polygon') {
+            layerType = 'mixed'; // Upgrade polygon to mixed
+        }
+
         this.layers.set(layerId, {
             ...(existingLayerConfig || {}), // Preserve existing config (e.g., polygon setup)
             dataLayer: dataLayer,
             markers: markers,
             clusterer: clusterer,
-            type: existingLayerConfig?.type === 'polygon' ? 'mixed' : 'point', // Upgrade to mixed if was polygon
+            type: layerType,
             color: color
         });
     }
