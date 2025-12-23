@@ -417,16 +417,21 @@ class MapManager {
         });
 
         // Store layer reference
+        // For mixed layers, merge with existing point layer config
+        const existingLayerConfig = this.layers.get(layerId);
         this.layers.set(layerId, {
+            ...(existingLayerConfig || {}), // Preserve existing config (e.g., markers, clusterer)
             dataLayer: dataLayer,
-            type: 'polygon',
+            type: existingLayerConfig?.type === 'point' ? 'mixed' : 'polygon', // Upgrade to mixed if was point
             color: color
         });
 
-        // Add click event
-        dataLayer.addListener('click', (event) => {
-            this.handleFeatureClick(event, layerId);
-        });
+        // Add click event (only if not already added)
+        if (!existingLayerConfig) {
+            dataLayer.addListener('click', (event) => {
+                this.handleFeatureClick(event, layerId);
+            });
+        }
     }
 
     /**
@@ -529,8 +534,29 @@ class MapManager {
         const markers = [];
         const dataLayer = dataSource.dataLayer;
 
-        // Hide data layer features so we only see markers (prevents duplicates)
-        dataLayer.setStyle({ visible: false });
+        // For mixed layers, only hide point features (keep polygons visible)
+        // For pure point layers, hide all features since we'll show markers instead
+        const existingType = existingLayer?.type;
+        if (existingType === 'polygon' || existingType === 'mixed') {
+            // Mixed layer: use style function to hide points but show polygons
+            const existingStyle = dataLayer.getStyle();
+            dataLayer.setStyle((feature) => {
+                const geometry = feature.getGeometry();
+                if (geometry.getType() === 'Point') {
+                    // Hide points - they'll be shown as markers
+                    return { visible: false };
+                } else {
+                    // Keep polygons visible with their existing style
+                    if (typeof existingStyle === 'function') {
+                        return existingStyle(feature);
+                    }
+                    return existingStyle || this.buildPolygonStyle(color);
+                }
+            });
+        } else {
+            // Pure point layer: hide all data layer features
+            dataLayer.setStyle({ visible: false });
+        }
 
         // Use marker configuration from AppConfig
         const pinPath = AppConfig.marker.pinPath;
@@ -612,11 +638,14 @@ class MapManager {
         }
 
         // Store layer reference
+        // For mixed layers, merge with existing polygon layer config
+        const existingLayerConfig = this.layers.get(layerId);
         this.layers.set(layerId, {
+            ...(existingLayerConfig || {}), // Preserve existing config (e.g., polygon setup)
             dataLayer: dataLayer,
             markers: markers,
             clusterer: clusterer,
-            type: 'point',
+            type: existingLayerConfig?.type === 'polygon' ? 'mixed' : 'point', // Upgrade to mixed if was polygon
             color: color
         });
     }
@@ -917,6 +946,14 @@ class MapManager {
         layerIds.forEach(layerId => {
             this.removeLayer(layerId);
         });
+
+        // Ensure all polygon labels are cleared (defensive)
+        if (this.polygonLabels) {
+            this.polygonLabels.forEach((labels, layerId) => {
+                labels.forEach(label => label.setMap(null));
+            });
+            this.polygonLabels.clear();
+        }
 
         // Clear selected feature
         this.clearSelectedFeature();
@@ -1486,8 +1523,21 @@ class MapManager {
             return;
         }
 
-        const labels = [];
+        // Check if layer actually exists and is visible
         const layer = this.layers.get(layerId);
+        if (!layer) {
+            console.warn(`togglePolygonLabels: Layer ${layerId} not found`);
+            return;
+        }
+
+        // Check if layer's data layer is visible on the map (indicates layer visibility)
+        const isLayerVisible = layer.dataLayer && layer.dataLayer.getMap() !== null;
+        if (!isLayerVisible) {
+            console.log(`togglePolygonLabels: Layer ${layerId} is hidden, not showing labels`);
+            return;
+        }
+
+        const labels = [];
 
         features.forEach(feature => {
             if (!feature.wkt || !feature.name) return;

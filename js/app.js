@@ -237,6 +237,9 @@ async function initializeApp() {
         // Setup EventBus subscriptions (replaces old callbacks)
         setupEventBusSubscriptions();
 
+        // Initialize undo/redo button states
+        updateHistoryButtons();
+
         // Setup map click handler for clearing selection
         setupMapClickHandler();
 
@@ -869,6 +872,28 @@ function setupEventListeners() {
             analyticsPanel.exportMetrics();
             toastManager.success('Analytics exported');
         }
+    });
+
+    // v3.0: Notification Center Actions
+    document.getElementById('notificationBtn').addEventListener('click', () => {
+        const panel = document.getElementById('notificationPanel');
+        const isVisible = panel.classList.contains('show');
+
+        if (isVisible) {
+            panel.classList.remove('show');
+        } else {
+            panel.classList.add('show');
+            // Render notifications when panel is opened
+            if (notificationCenter) {
+                notificationCenter.render();
+                // Mark notifications as read after viewing
+                notificationCenter.markAllAsRead();
+            }
+        }
+    });
+
+    document.getElementById('closeNotificationPanel').addEventListener('click', () => {
+        document.getElementById('notificationPanel').classList.remove('show');
     });
 
     // v3.0: Activity Log Actions
