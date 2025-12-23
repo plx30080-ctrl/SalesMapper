@@ -3330,17 +3330,19 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
         // Remove existing layer
         mapManager.removeLayer(layerId);
 
-        // Enable clustering for point layers
-        const enableClustering = layer.type === 'point';
+        // Enable clustering for point and mixed layers
+        const enableClustering = layer.type === 'point' || layer.type === 'mixed';
         const dataLayer = mapManager.createDataSource(layerId, enableClustering, wasVisible);
 
         // Add all features to data source
+        // For mixed layers, check individual feature types
         const geoJsonFeatures = layer.features.map((feature, index) => {
             let geometry;
 
-            if (layer.type === 'polygon' && feature.wkt) {
+            // Check feature type by presence of wkt (polygon) or lat/lng (point)
+            if (feature.wkt) {
                 geometry = mapManager.parseWKT(feature.wkt);
-            } else if (layer.type === 'point' && feature.latitude && feature.longitude) {
+            } else if (feature.latitude !== undefined && feature.longitude !== undefined) {
                 geometry = {
                     type: 'Point',
                     coordinates: [parseFloat(feature.longitude), parseFloat(feature.latitude)]
@@ -3371,11 +3373,21 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
         console.log('=== END PROPERTY STYLING DEBUG ===');
 
         // Apply data-driven styling for Google Maps
-        if (layer.type === 'polygon') {
-            // For polygons, use data layer styling
+        // Handle polygon and mixed layers (both need polygon styling)
+        const hasPolygons = layer.type === 'polygon' || layer.type === 'mixed';
+        const hasPoints = layer.type === 'point' || layer.type === 'mixed';
+
+        if (hasPolygons) {
+            // For polygons and mixed layers, use data layer styling
             dataLayer.setStyle((feature) => {
+                const geometry = feature.getGeometry();
                 const propValue = feature.getProperty(actualPropertyName);
                 const color = colorMap[propValue] || '#cccccc';
+
+                // For mixed layers, hide points (they'll be shown as markers)
+                if (layer.type === 'mixed' && geometry.getType() === 'Point') {
+                    return { visible: false };
+                }
 
                 return {
                     fillColor: color,
@@ -3386,23 +3398,21 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
                 };
             });
 
-            // Store layer reference
-            mapManager.layers.set(layerId, {
-                dataLayer: dataLayer,
-                type: 'polygon',
-                color: 'data-driven'
-            });
-
             // Add click event
             dataLayer.addListener('click', (event) => {
                 mapManager.handleFeatureClick(event, layerId);
             });
-        } else {
-            // For points, create markers with appropriate colors
+        }
+
+        if (hasPoints) {
+            // For points and mixed layers, create markers with appropriate colors
             const markers = [];
 
-            // Hide data layer features so we only see markers (prevents duplicates)
-            dataLayer.setStyle({ visible: false });
+            // For pure point layers, hide all data layer features
+            // For mixed layers, we've already set conditional styling above
+            if (layer.type === 'point') {
+                dataLayer.setStyle({ visible: false });
+            }
 
             // SVG path for teardrop/pin marker
             const pinPath = 'M 0,0 C -2,-20 -10,-22 -10,-30 A 10,10 0 1,1 10,-30 C 10,-22 2,-20 0,0 z';
@@ -3474,15 +3484,20 @@ function applyPropertyBasedStyle(layerId, property, styleType) {
                 }
             }
 
-            // Store layer reference
-            mapManager.layers.set(layerId, {
-                dataLayer: dataLayer,
+            // Store markers and clusterer (will be merged with layer config below)
+            var pointLayerData = {
                 markers: markers,
-                clusterer: clusterer,
-                type: 'point',
-                color: 'data-driven'
-            });
+                clusterer: clusterer
+            };
         }
+
+        // Store unified layer reference (preserves original type)
+        mapManager.layers.set(layerId, {
+            dataLayer: dataLayer,
+            ...(pointLayerData || {}), // Include markers/clusterer if hasPoints
+            type: layer.type, // Preserve original type (point, polygon, or mixed)
+            color: 'data-driven'
+        });
 
         // IMPORTANT: Restore the layer's visibility state
         // This prevents layers from becoming visible during real-time sync
