@@ -274,7 +274,7 @@ class LayerManager {
         }
 
         // Emit event
-        eventBus.emit('layer.deleted', { layerId, layer });
+        eventBus.emit('layer.deleted', { layerId, layerName: layer.name, layer });
 
         return layer;
     }
